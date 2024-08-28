@@ -251,7 +251,6 @@ impl Board {
         BitBoard(legal_move_bitmask)
     }
 
-    // Should this be a member of the board structure, it seems out of scope.
     pub fn get_text_representation(&self) -> [String; 64] {
         fn insert_chess_pieces(
             bitboard: BitBoard,
