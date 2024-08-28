@@ -1,5 +1,5 @@
 [package]
-name = "chess_bevy"
+name = "chess_egui"
 version = "0.1.0"
 edition = "2021"
 
