@@ -9,9 +9,9 @@ Required rules to be implemented:
 * Castling
 * Promotion
 * En Passant
-* Tests
 
 Future implementation:
+* Tests
 * [Perft](https://www.chessprogramming.org/Perft)
 * [Minimax evaluation algorithm](https://www.chessprogramming.org/Minimax)
 * [Magic bitboards](https://www.chessprogramming.org/Magic_Bitboards)
