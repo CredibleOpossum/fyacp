@@ -78,6 +78,14 @@ impl Pieces {
     }
 }
 
+fn vaild_position(position: [i32; 2]) -> bool {
+    (0..8).contains(&position[0]) && (0..8).contains(&position[1])
+}
+
+fn position_flatten(position: [i32; 2]) -> u8 {
+    ((position[0] % 8) + position[1] * 8) as u8
+}
+
 fn calculate_sliding(direction: [i32; 2]) -> [u64; 64] {
     let mut table = [0; 64];
     for position in 0..BOARD_SIZE {
@@ -89,11 +97,10 @@ fn calculate_sliding(direction: [i32; 2]) -> [u64; 64] {
             current_position[0] += direction[0];
             current_position[1] += direction[1];
 
-            let vaild_position =
-                (0..8).contains(&current_position[0]) && (0..8).contains(&current_position[1]);
+            let is_vaild_position = vaild_position(current_position);
 
-            if vaild_position {
-                bitmap.set_bit(((current_position[0] % 8) + current_position[1] * 8) as u8);
+            if is_vaild_position {
+                bitmap.set_bit(position_flatten(current_position));
             } else {
                 break;
             }

@@ -32,6 +32,8 @@ impl Board {
     pub fn print_board(&self) {
         let mut text_representation = self.get_text_representation();
         text_representation.reverse();
+
+        println!("----------");
         for i in 0..64 {
             let char = text_representation[i].clone();
             if i % 8 == 0 {
@@ -43,11 +45,12 @@ impl Board {
                 print!("  ");
             }
         }
+        println!("\n----------");
     }
     pub fn is_in_checkmate(&self) -> bool {
         let mut move_bitmask = 0;
         for possible_move in 0..64 {
-            move_bitmask |= self.generate_legal_moves(possible_move).0;
+            move_bitmask |= self.get_legal_moves(possible_move).0;
         }
 
         move_bitmask == 0
@@ -82,10 +85,26 @@ impl Board {
         let mut new_board = *self;
 
         let piece_type = new_board.find_piece(position);
-        new_board.clear_square(position);
+
+        new_board.bitboards[piece_type as usize].clear_bit(position);
         new_board.clear_square(destination);
         new_board.bitboards[piece_type as usize].set_bit(destination);
-        new_board.turn = self.switch_turn();
+
+        // PROMOTION, will allow underpromotion in the future
+        let black_pawns_on_last_rank =
+            BOARD_BOTTOM & new_board.bitboards[Pieces::BlackPawn as usize].0; // Should only be possible to have one pawn on last rank, name is still accurate
+        let white_pawns_on_last_rank =
+            BOARD_TOP & new_board.bitboards[Pieces::WhitePawn as usize].0;
+        new_board.bitboards[Pieces::WhitePawn as usize].0 &= UNIVERSE ^ white_pawns_on_last_rank;
+        new_board.bitboards[Pieces::WhiteQueen as usize].0 |= white_pawns_on_last_rank;
+        new_board.bitboards[Pieces::BlackPawn as usize].0 &= UNIVERSE ^ black_pawns_on_last_rank;
+        new_board.bitboards[Pieces::BlackQueen as usize].0 |= black_pawns_on_last_rank;
+
+        if (white_pawns_on_last_rank | black_pawns_on_last_rank) != 0 {
+            // We changed piece type, lets remove it from the old bitboard.
+            new_board.bitboards[piece_type as usize].clear_bit(destination);
+        }
+        new_board.turn = new_board.switch_turn();
 
         new_board
     }
@@ -215,13 +234,13 @@ impl Board {
     }
 
     pub fn try_make_move(&mut self, position: u8, destination: u8) {
-        let legal_moves = self.generate_legal_moves(position);
+        let legal_moves = self.get_legal_moves(position);
 
         if legal_moves.0 & (1 << destination) != 0 {
             *self = self.move_piece(position, destination);
         }
     }
-    pub fn generate_legal_moves(&self, position: u8) -> BitBoard {
+    pub fn get_legal_moves(&self, position: u8) -> BitBoard {
         let psuedo_legal_moves = self.get_pseudolegal_moves(position);
 
         let mut legal_move_bitmask = 0;
