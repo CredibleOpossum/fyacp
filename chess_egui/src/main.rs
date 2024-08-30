@@ -55,7 +55,7 @@ fn main() -> eframe::Result {
                         }
 
                         if row_ui.add_sized(BUTTON_SIZE, title).clicked() {
-                            color_mask = board.generate_legal_moves(position_index as u8).0;
+                            color_mask = board.get_legal_moves(position_index as u8).0;
 
                             if let Some(previous_click_position) = previous_click {
                                 board.try_make_move(
@@ -65,7 +65,7 @@ fn main() -> eframe::Result {
                             }
 
                             if color_mask != 0 {
-                                previous_click = Some(position_index as u64);
+                                previous_click = Some(position_index);
                                 previous_colormap = color_mask;
                             } else {
                                 previous_click = None;
@@ -74,6 +74,7 @@ fn main() -> eframe::Result {
                     }
                 });
             }
+
             if board.is_in_checkmate() {
                 ui.label(format!("{:?} wins!", board.switch_turn()));
                 return;
