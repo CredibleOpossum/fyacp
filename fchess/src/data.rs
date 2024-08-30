@@ -1,3 +1,5 @@
+use std::default;
+
 use colored::Colorize;
 
 pub static EMPTY: u64 = 0;
@@ -21,6 +23,80 @@ pub enum Color {
     White,
     Black,
 }
+
+#[derive(Clone, Copy, Debug)]
+pub enum PromotionType {
+    Queen,
+    Rook,
+    Bishop,
+    Knight,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum MoveType {
+    Capture,
+    Promotion,
+    EnPassant,
+    Castling,
+}
+
+/// bit  0- 5: origin square (from 0 to 63)
+/// bit  6-11: destination square (from 0 to 63)
+/// bit 12-13: promotion piece type - 2 (from KNIGHT-2 to QUEEN-2) NOT IMPLEMENTED
+/// bit 14-15: special move flag: promotion (1), en passant (2), castling (3)
+#[derive(Clone, Copy, Debug)]
+pub struct ChessMove {
+    pub position: u8,
+    pub destination: u8,
+    pub promotion_type: PromotionType,
+    pub move_type: MoveType,
+}
+impl ChessMove {
+    pub fn pack(&self) -> u16 {
+        let position: u16 = (self.position as u16 & 0b111111) << 10; // 6 bits
+        let destination: u16 = (self.destination as u16 & 0b111111) << 4; // 6 bits
+        let promotion_type: u16 = (self.promotion_type as u16 & 0b11) << 2; // 2 bits
+        let move_type: u16 = self.move_type as u16 & 0b11; // 2 bits
+
+        position | destination | promotion_type | move_type
+    }
+
+    pub fn unpack(packed_move: u16) -> ChessMove {
+        let position_bitmask: u16 = 0b1111110000000000;
+        let destination_bitmask: u16 = 0b0000001111110000;
+        let promotion_bitmask: u16 = 0b0000000000001100;
+        let move_type_bitmask: u16 = 0b0000000000000011;
+
+        let position: u8 = ((packed_move & position_bitmask) >> 10) as u8;
+        let destination: u8 = ((packed_move & destination_bitmask) >> 4) as u8;
+        let promotion_type: u8 = ((packed_move & promotion_bitmask) >> 2) as u8;
+        let move_type: u8 = (packed_move & move_type_bitmask) as u8;
+
+        let promotion_type = match promotion_type {
+            0 => PromotionType::Queen,
+            1 => PromotionType::Rook,
+            2 => PromotionType::Bishop,
+            3 => PromotionType::Knight,
+            _ => panic!(),
+        };
+
+        let move_type = match move_type {
+            0 => MoveType::Capture,
+            1 => MoveType::Promotion,
+            2 => MoveType::EnPassant,
+            3 => MoveType::Castling,
+            _ => panic!(),
+        };
+
+        ChessMove {
+            position,
+            destination,
+            promotion_type,
+            move_type,
+        }
+    }
+}
+
 pub static STARTING_POSITION: [BitBoard; 12] = [
     BitBoard(8),
     BitBoard(16),

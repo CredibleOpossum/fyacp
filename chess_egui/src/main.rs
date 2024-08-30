@@ -55,7 +55,7 @@ fn main() -> eframe::Result {
                         }
 
                         if row_ui.add_sized(BUTTON_SIZE, title).clicked() {
-                            color_mask = board.get_legal_moves(position_index as u8).0;
+                            color_mask = board.get_legal_movement_mask(position_index as u8);
 
                             if let Some(previous_click_position) = previous_click {
                                 board.try_make_move(

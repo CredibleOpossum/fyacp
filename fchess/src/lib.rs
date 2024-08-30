@@ -5,30 +5,58 @@ mod data;
 use data::*;
 
 const EMPTY_STRING: String = String::new();
+#[derive(Clone, Copy)]
+pub struct CastlingRights {
+    white_queenside: bool,
+    white_kingside: bool,
+    black_queenside: bool,
+    black_kingside: bool,
+}
+impl Default for CastlingRights {
+    fn default() -> Self {
+        CastlingRights {
+            white_queenside: true,
+            white_kingside: true,
+            black_queenside: true,
+            black_kingside: true,
+        }
+    }
+}
 
 #[derive(Clone, Copy)]
 pub struct Board {
     bitboards: [BitBoard; 12],
-    lookup_tables: [[u64; 64]; 10],
-    other_tables: RaycastTables, // This should be in some kind of meta object.
-
+    castling_rights: CastlingRights,
+    en_passant: Option<u64>, // Denotes the position of where the en passant square can be captured
     turn: Color,
+
+    lookup_tables: [[u64; 64]; 10], // This should be in some kind of meta object, not related directly to the rules/behavior of chess.
+    other_tables: RaycastTables,
 }
 
 impl Default for Board {
     fn default() -> Self {
         Board {
             bitboards: STARTING_POSITION,
+            castling_rights: CastlingRights::default(),
+            en_passant: None,
+            turn: Color::White,
 
             lookup_tables: generate_data(),
             other_tables: RaycastTables::new(),
-
-            turn: Color::White,
         }
     }
 }
 
 impl Board {
+    pub fn get_legal_movement_mask(&self, position: u8) -> u64 {
+        let mut mask: u64 = 0;
+        for legal_move in self.get_legal_moves(position) {
+            let legal_move_parsed = ChessMove::unpack(legal_move);
+            mask |= 1 << legal_move_parsed.destination;
+        }
+        mask
+    }
     pub fn print_board(&self) {
         let mut text_representation = self.get_text_representation();
         text_representation.reverse();
@@ -47,14 +75,16 @@ impl Board {
         }
         println!("\n----------");
     }
-    pub fn is_in_checkmate(&self) -> bool {
-        let mut move_bitmask = 0;
-        for possible_move in 0..64 {
-            move_bitmask |= self.get_legal_moves(possible_move).0;
-        }
 
-        move_bitmask == 0
+    pub fn is_in_checkmate(&self) -> bool {
+        for possible_move in 0..64 {
+            if !self.get_legal_moves(possible_move).is_empty() {
+                return false;
+            }
+        }
+        true
     }
+
     pub fn clear_square(&mut self, position: u8) {
         for bitboard in &mut self.bitboards {
             bitboard.clear_bit(position);
@@ -81,20 +111,21 @@ impl Board {
         }
     }
 
-    pub fn move_piece(&self, position: u8, destination: u8) -> Board {
+    pub fn move_piece(&self, chess_move: u16) -> Board {
+        let chess_move = ChessMove::unpack(chess_move);
         let mut new_board = *self;
 
-        let piece_type = new_board.find_piece(position);
+        let piece_type = new_board.find_piece(chess_move.position);
 
-        new_board.bitboards[piece_type as usize].clear_bit(position);
-        new_board.clear_square(destination);
-        new_board.bitboards[piece_type as usize].set_bit(destination);
+        new_board.bitboards[piece_type as usize].clear_bit(chess_move.position);
+        new_board.clear_square(chess_move.destination);
+        new_board.bitboards[piece_type as usize].set_bit(chess_move.destination);
 
         // PROMOTION, will allow underpromotion in the future
-        let black_pawns_on_last_rank =
-            BOARD_BOTTOM & new_board.bitboards[Pieces::BlackPawn as usize].0; // Should only be possible to have one pawn on last rank, name is still accurate
         let white_pawns_on_last_rank =
-            BOARD_TOP & new_board.bitboards[Pieces::WhitePawn as usize].0;
+            BOARD_TOP & new_board.bitboards[Pieces::WhitePawn as usize].0; // Should only be possible to have one pawn on last rank, name is still accurate
+        let black_pawns_on_last_rank =
+            BOARD_BOTTOM & new_board.bitboards[Pieces::BlackPawn as usize].0;
         new_board.bitboards[Pieces::WhitePawn as usize].0 &= UNIVERSE ^ white_pawns_on_last_rank;
         new_board.bitboards[Pieces::WhiteQueen as usize].0 |= white_pawns_on_last_rank;
         new_board.bitboards[Pieces::BlackPawn as usize].0 &= UNIVERSE ^ black_pawns_on_last_rank;
@@ -102,7 +133,7 @@ impl Board {
 
         if (white_pawns_on_last_rank | black_pawns_on_last_rank) != 0 {
             // We changed piece type, lets remove it from the old bitboard.
-            new_board.bitboards[piece_type as usize].clear_bit(destination);
+            new_board.bitboards[piece_type as usize].clear_bit(chess_move.destination);
         }
         new_board.turn = new_board.switch_turn();
 
@@ -148,13 +179,13 @@ impl Board {
         ray_cast_sum
     }
 
-    pub fn get_pseudolegal_moves(&self, position: u8) -> BitBoard {
+    pub fn get_pseudolegal_move_mask(&self, position: u8) -> u64 {
         let piece_type = self.find_piece(position);
         let piece_type_id = piece_type as usize;
 
         if piece_type == Pieces::None {
             // This is an empty square, no movement.
-            return BitBoard(0);
+            return 0;
         }
 
         let piece_color = match piece_type_id / 6 {
@@ -163,12 +194,12 @@ impl Board {
             _ => panic!(),
         };
         if piece_color != self.turn {
-            return BitBoard(0);
+            return 0;
         }
 
         let lookup = [0, 1, 2, 3, 4, 9, 0, 1, 2, 3, 4, 9];
 
-        let mut movement = BitBoard(self.lookup_tables[lookup[piece_type_id]][position as usize]);
+        let mut movement = self.lookup_tables[lookup[piece_type_id]][position as usize];
 
         let mut friendly_occupancy = 0;
         let mut enemy_occupancy = 0;
@@ -187,20 +218,20 @@ impl Board {
 
         match piece_type {
             Pieces::WhitePawn => {
-                movement.0 |= self.lookup_tables[LookupTable::WhitePawnMoves as usize]
+                movement |= self.lookup_tables[LookupTable::WhitePawnMoves as usize]
                     [position as usize]
                     & (UNIVERSE ^ occupancy);
 
-                movement.0 |= self.lookup_tables[LookupTable::WhitePawnCaptures as usize]
+                movement |= self.lookup_tables[LookupTable::WhitePawnCaptures as usize]
                     [position as usize]
                     & enemy_occupancy;
             }
             Pieces::BlackPawn => {
-                movement.0 |= self.lookup_tables[LookupTable::BlackPawnMoves as usize]
+                movement |= self.lookup_tables[LookupTable::BlackPawnMoves as usize]
                     [position as usize]
                     & (UNIVERSE ^ occupancy);
 
-                movement.0 |= self.lookup_tables[LookupTable::BlackPawnCaptures as usize]
+                movement |= self.lookup_tables[LookupTable::BlackPawnCaptures as usize]
                     [position as usize]
                     & enemy_occupancy;
             }
@@ -225,49 +256,74 @@ impl Board {
         };
 
         if is_sliding_piece {
-            movement.0 &= self.raycast_calculate(position, occupancy);
+            movement &= self.raycast_calculate(position, occupancy);
         }
 
-        movement.0 &= UNIVERSE ^ friendly_occupancy;
+        movement &= UNIVERSE ^ friendly_occupancy;
 
         movement
     }
 
-    pub fn try_make_move(&mut self, position: u8, destination: u8) {
-        let legal_moves = self.get_legal_moves(position);
+    fn get_pseudolegal_moves(&self, position: u8) -> Vec<u16> {
+        let legal_move_mask = self.get_pseudolegal_move_mask(position);
 
-        if legal_moves.0 & (1 << destination) != 0 {
-            *self = self.move_piece(position, destination);
-        }
-    }
-    pub fn get_legal_moves(&self, position: u8) -> BitBoard {
-        let psuedo_legal_moves = self.get_pseudolegal_moves(position);
-
-        let mut legal_move_bitmask = 0;
-
-        for bit in 0..64 {
-            let bit_bitmask = 1 << bit;
-
-            if psuedo_legal_moves.0 & bit_bitmask != 0 {
-                let chess_move = self.move_piece(position, bit);
-
-                let king_bitmask = match chess_move.switch_turn() {
-                    Color::White => chess_move.bitboards[0],
-                    Color::Black => chess_move.bitboards[6],
-                };
-
-                let mut enemy_bitmask = 0;
-                for enemy_bit in 0..64 {
-                    enemy_bitmask |= chess_move.get_pseudolegal_moves(enemy_bit).0;
-                }
-
-                if (enemy_bitmask & king_bitmask.0) == 0 {
-                    legal_move_bitmask |= 1 << bit;
-                }
+        let mut move_buffer = Vec::new();
+        for destination in 0..64 {
+            let destination_mask = 1 << destination;
+            if legal_move_mask & destination_mask != 0 {
+                move_buffer.push(ChessMove::pack(&ChessMove {
+                    position,
+                    destination,
+                    promotion_type: PromotionType::Queen,
+                    move_type: MoveType::Capture,
+                }))
             }
         }
 
-        BitBoard(legal_move_bitmask)
+        move_buffer
+    }
+
+    pub fn try_make_move(&mut self, position: u8, destination: u8) {
+        let legal_moves = self.get_legal_moves(position);
+        for possible_move in legal_moves {
+            if ChessMove::unpack(possible_move).destination == destination {
+                *self = self.move_piece(possible_move);
+            }
+        }
+    }
+
+    fn find_kind_bitboard(&self, color: Color) -> BitBoard {
+        match color {
+            Color::White => self.bitboards[0],
+            Color::Black => self.bitboards[6],
+        }
+    }
+
+    pub fn get_legal_moves(&self, position: u8) -> Vec<u16> {
+        let psuedo_legal_moves = self.get_pseudolegal_moves(position);
+
+        let mut legal_move_buffer = Vec::new();
+        for psuedo_legal_move in &psuedo_legal_moves {
+            let psuedo_legal_move_parsed = ChessMove::unpack(*psuedo_legal_move);
+            let chess_move = self.move_piece(*psuedo_legal_move);
+
+            let king_bitmask = chess_move.find_kind_bitboard(chess_move.switch_turn());
+
+            let mut enemy_bitmask = 0;
+            for enemy_bit in 0..64 {
+                let enemy_moves = chess_move.get_pseudolegal_moves(enemy_bit);
+                for possible_response in enemy_moves {
+                    let enemy_move_attack = ChessMove::unpack(possible_response).destination;
+                    enemy_bitmask |= 1 << enemy_move_attack;
+                }
+            }
+
+            if enemy_bitmask & king_bitmask.0 == 0 {
+                legal_move_buffer.push(*psuedo_legal_move)
+            }
+        }
+
+        legal_move_buffer
     }
 
     pub fn get_text_representation(&self) -> [String; 64] {
