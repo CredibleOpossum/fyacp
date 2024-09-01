@@ -1,4 +1,6 @@
 mod chess_data;
+use std::path::absolute;
+
 use chess_data::generate_data;
 
 mod data;
@@ -27,7 +29,7 @@ impl Default for CastlingRights {
 pub struct Board {
     bitboards: [BitBoard; 12],
     castling_rights: CastlingRights,
-    en_passant: Option<u64>, // Denotes the position of where the en passant square can be captured
+    en_passant: Option<u8>, // Denotes the position of where the en passant square can be captured
     turn: Color,
 
     lookup_tables: [[u64; 64]; 10], // This should be in some kind of meta object, not related directly to the rules/behavior of chess.
@@ -114,27 +116,47 @@ impl Board {
     pub fn move_piece(&self, chess_move: u16) -> Board {
         let chess_move = ChessMove::unpack(chess_move);
         let mut new_board = *self;
-
         let piece_type = new_board.find_piece(chess_move.position);
 
         new_board.bitboards[piece_type as usize].clear_bit(chess_move.position);
-        new_board.clear_square(chess_move.destination);
-        new_board.bitboards[piece_type as usize].set_bit(chess_move.destination);
 
-        // PROMOTION, will allow underpromotion in the future
-        let white_pawns_on_last_rank =
-            BOARD_TOP & new_board.bitboards[Pieces::WhitePawn as usize].0; // Should only be possible to have one pawn on last rank, name is still accurate
-        let black_pawns_on_last_rank =
-            BOARD_BOTTOM & new_board.bitboards[Pieces::BlackPawn as usize].0;
-        new_board.bitboards[Pieces::WhitePawn as usize].0 &= UNIVERSE ^ white_pawns_on_last_rank;
-        new_board.bitboards[Pieces::WhiteQueen as usize].0 |= white_pawns_on_last_rank;
-        new_board.bitboards[Pieces::BlackPawn as usize].0 &= UNIVERSE ^ black_pawns_on_last_rank;
-        new_board.bitboards[Pieces::BlackQueen as usize].0 |= black_pawns_on_last_rank;
-
-        if (white_pawns_on_last_rank | black_pawns_on_last_rank) != 0 {
-            // We changed piece type, lets remove it from the old bitboard.
-            new_board.bitboards[piece_type as usize].clear_bit(chess_move.destination);
+        match chess_move.move_type {
+            MoveType::QuietMove => todo!(),
+            MoveType::DoublePawnPush => {
+                if chess_move.move_type == MoveType::DoublePawnPush {
+                    new_board.en_passant = Some(chess_move.position);
+                } else {
+                    new_board.en_passant = None;
+                }
+                new_board.clear_square(chess_move.destination);
+            }
+            MoveType::KingCastle => todo!(),
+            MoveType::QueenCastle => todo!(),
+            MoveType::Capture => {
+                new_board.clear_square(chess_move.destination);
+            }
+            MoveType::EnPassant => {
+                let direction: i32 = match new_board.turn {
+                    Color::White => -16,
+                    Color::Black => 16,
+                };
+                new_board.clear_square((self.en_passant.unwrap() as i32 + direction) as u8);
+            }
+            MoveType::QueenPromotion => {
+                new_board.clear_square(chess_move.destination);
+                match self.turn {
+                    Color::White => new_board.bitboards[Pieces::WhiteQueen as usize]
+                        .set_bit(chess_move.destination),
+                    Color::Black => new_board.bitboards[Pieces::BlackQueen as usize]
+                        .set_bit(chess_move.destination),
+                };
+            }
+            MoveType::RookPromotion => todo!(),
+            MoveType::BishopPromotion => todo!(),
+            MoveType::Knight => todo!(),
         }
+
+        new_board.bitboards[piece_type as usize].set_bit(chess_move.destination);
         new_board.turn = new_board.switch_turn();
 
         new_board
@@ -271,12 +293,79 @@ impl Board {
         for destination in 0..64 {
             let destination_mask = 1 << destination;
             if legal_move_mask & destination_mask != 0 {
+                let piece = self.find_piece(position); // This will be refactored next pull request
+                if let Some(en_passant_square) = self.en_passant {
+                    match piece {
+                        Pieces::WhitePawn => {
+                            if self.lookup_tables[LookupTable::WhitePawnCaptures as usize]
+                                [position as usize]
+                                & (1 << (en_passant_square - 8))
+                                != 0
+                            {
+                                move_buffer.push(ChessMove::pack(&ChessMove {
+                                    position,
+                                    destination: en_passant_square - 8,
+                                    move_type: MoveType::EnPassant,
+                                }));
+                                continue;
+                            }
+                        }
+
+                        Pieces::BlackPawn => {
+                            if self.lookup_tables[LookupTable::BlackPawnCaptures as usize]
+                                [position as usize]
+                                & (1 << (en_passant_square + 8))
+                                != 0
+                            {
+                                move_buffer.push(ChessMove::pack(&ChessMove {
+                                    position,
+                                    destination: en_passant_square + 8,
+                                    move_type: MoveType::EnPassant,
+                                }));
+                                continue;
+                            }
+                        }
+
+                        _ => {}
+                    }
+                }
+                if piece == Pieces::WhitePawn || piece == Pieces::BlackPawn {
+                    let ending_rank = match self.turn {
+                        Color::White => 7,
+                        Color::Black => 0,
+                    };
+                    let is_on_ending_rank = (destination / 8) == ending_rank;
+
+                    if is_on_ending_rank {
+                        move_buffer.push(ChessMove::pack(&ChessMove {
+                            position,
+                            destination,
+                            move_type: MoveType::QueenPromotion,
+                        }));
+                        continue;
+                    }
+                    if (position as i32 - destination as i32).abs() > 8 {
+                        move_buffer.push(ChessMove::pack(&ChessMove {
+                            position,
+                            destination,
+                            move_type: MoveType::DoublePawnPush,
+                        }));
+                        continue;
+                    } else {
+                        move_buffer.push(ChessMove::pack(&ChessMove {
+                            position,
+                            destination,
+                            move_type: MoveType::Capture,
+                        }));
+                        continue;
+                    }
+                }
+
                 move_buffer.push(ChessMove::pack(&ChessMove {
                     position,
                     destination,
-                    promotion_type: PromotionType::Queen,
                     move_type: MoveType::Capture,
-                }))
+                }));
             }
         }
 
@@ -304,7 +393,6 @@ impl Board {
 
         let mut legal_move_buffer = Vec::new();
         for psuedo_legal_move in &psuedo_legal_moves {
-            let psuedo_legal_move_parsed = ChessMove::unpack(*psuedo_legal_move);
             let chess_move = self.move_piece(*psuedo_legal_move);
 
             let king_bitmask = chess_move.find_kind_bitboard(chess_move.switch_turn());
