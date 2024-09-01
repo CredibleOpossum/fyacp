@@ -123,11 +123,6 @@ impl Board {
         match chess_move.move_type {
             MoveType::QuietMove => todo!(),
             MoveType::DoublePawnPush => {
-                if chess_move.move_type == MoveType::DoublePawnPush {
-                    new_board.en_passant = Some(chess_move.position);
-                } else {
-                    new_board.en_passant = None;
-                }
                 new_board.clear_square(chess_move.destination);
             }
             MoveType::KingCastle => todo!(),
@@ -154,6 +149,12 @@ impl Board {
             MoveType::RookPromotion => todo!(),
             MoveType::BishopPromotion => todo!(),
             MoveType::Knight => todo!(),
+        }
+
+        if chess_move.move_type == MoveType::DoublePawnPush {
+            new_board.en_passant = Some(chess_move.position);
+        } else {
+            new_board.en_passant = None;
         }
 
         new_board.bitboards[piece_type as usize].set_bit(chess_move.destination);
