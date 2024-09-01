@@ -8,7 +8,7 @@
 Required rules to be implemented:
 * Castling
 * ~~Promotion~~
-* En Passant
+* ~~En Passant~~
 
 Future implementation:
 * Tests
