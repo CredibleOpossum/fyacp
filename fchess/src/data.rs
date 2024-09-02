@@ -262,5 +262,7 @@ pub enum LookupTable {
     WhitePawnCaptures,
     BlackPawnMoves,
     BlackPawnCaptures,
+    WhitePawnLongMoves,
+    BlackPawnLongMoves,
     Blank,
 }

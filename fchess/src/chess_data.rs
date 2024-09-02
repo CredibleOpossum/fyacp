@@ -1,9 +1,11 @@
+use std::fs::DirBuilder;
+
 // The nice thing about bitboards is that it doesn't matter how you generate them as they are only calculated once, a lot of this is inefficient or strange
 // This should probably be some form of bootstrapping instead of generating it on launch.
 use crate::data::*;
 use crate::{BitBoard, RaycastTables, EMPTY};
 
-pub fn generate_data() -> [[u64; 64]; 10] {
+pub fn generate_data() -> [[u64; 64]; 12] {
     /*
     An array is basically required for performance / ergonomics but I should get rid of magic indexes
     Currently, the lookup table and the actual table could be desynced and cause painful bugs.
@@ -18,8 +20,30 @@ pub fn generate_data() -> [[u64; 64]; 10] {
         generate_pawn_captures(Color::White),
         generate_pawn_moves(Color::Black),
         generate_pawn_captures(Color::Black),
+        generate_long_pawn_moves(Color::White),
+        generate_long_pawn_moves(Color::Black),
         [EMPTY; 64],
     ]
+}
+
+fn generate_long_pawn_moves(color: Color) -> [u64; 64] {
+    let mut moves = [0; 64];
+
+    for position in 0..64 {
+        let direction: i32 = match color {
+            Color::White => 8,
+            Color::Black => -8,
+        };
+        let on_rank = match color {
+            Color::White => position / 8 == 1,
+            Color::Black => position / 8 == 6,
+        };
+        if on_rank {
+            moves[position] = 1 << (position as i32 + direction * 2);
+        }
+    }
+
+    moves
 }
 
 fn generate_pawn_moves(color: Color) -> [u64; 64] {

@@ -32,7 +32,7 @@ pub struct Board {
     en_passant: Option<u8>, // Denotes the position of where the en passant square can be captured
     turn: Color,
 
-    lookup_tables: [[u64; 64]; 10], // This should be in some kind of meta object, not related directly to the rules/behavior of chess.
+    lookup_tables: [[u64; 64]; 12], // This should be in some kind of meta object, not related directly to the rules/behavior of chess.
     other_tables: RaycastTables,
 }
 
@@ -293,81 +293,73 @@ impl Board {
         let mut move_buffer = Vec::new();
         for destination in 0..64 {
             let destination_mask = 1 << destination;
-            if legal_move_mask & destination_mask != 0 {
-                let piece = self.find_piece(position); // This will be refactored next pull request
-                if let Some(en_passant_square) = self.en_passant {
-                    match piece {
-                        Pieces::WhitePawn => {
-                            if self.lookup_tables[LookupTable::WhitePawnCaptures as usize]
-                                [position as usize]
-                                & (1 << (en_passant_square - 8))
-                                != 0
-                            {
-                                move_buffer.push(ChessMove::pack(&ChessMove {
-                                    position,
-                                    destination: en_passant_square - 8,
-                                    move_type: MoveType::EnPassant,
-                                }));
-                                continue;
-                            }
+            if legal_move_mask & destination_mask == 0 {
+                continue;
+            }
+            let piece = self.find_piece(position);
+            if self.en_passant.is_some() {
+                match piece {
+                    Pieces::WhitePawn => {
+                        if self.lookup_tables[LookupTable::WhitePawnCaptures as usize]
+                            [position as usize]
+                            & (1 << (self.en_passant.unwrap() - 8))
+                            != 0
+                        {
+                            move_buffer.push(ChessMove::pack(&ChessMove {
+                                position,
+                                destination: self.en_passant.unwrap() - 8,
+                                move_type: MoveType::EnPassant,
+                            }));
+                            continue;
                         }
+                    }
 
-                        Pieces::BlackPawn => {
-                            if self.lookup_tables[LookupTable::BlackPawnCaptures as usize]
-                                [position as usize]
-                                & (1 << (en_passant_square + 8))
-                                != 0
-                            {
-                                move_buffer.push(ChessMove::pack(&ChessMove {
-                                    position,
-                                    destination: en_passant_square + 8,
-                                    move_type: MoveType::EnPassant,
-                                }));
-                                continue;
-                            }
+                    Pieces::BlackPawn => {
+                        if self.lookup_tables[LookupTable::BlackPawnCaptures as usize]
+                            [position as usize]
+                            & (1 << (self.en_passant.unwrap() + 8))
+                            != 0
+                        {
+                            move_buffer.push(ChessMove::pack(&ChessMove {
+                                position,
+                                destination: self.en_passant.unwrap() + 8,
+                                move_type: MoveType::EnPassant,
+                            }));
+                            continue;
                         }
-
-                        _ => {}
                     }
+                    _ => {}
                 }
-                if piece == Pieces::WhitePawn || piece == Pieces::BlackPawn {
-                    let ending_rank = match self.turn {
-                        Color::White => 7,
-                        Color::Black => 0,
-                    };
-                    let is_on_ending_rank = (destination / 8) == ending_rank;
+            }
 
-                    if is_on_ending_rank {
-                        move_buffer.push(ChessMove::pack(&ChessMove {
-                            position,
-                            destination,
-                            move_type: MoveType::QueenPromotion,
-                        }));
-                        continue;
-                    }
-                    if (position as i32 - destination as i32).abs() > 8 {
-                        move_buffer.push(ChessMove::pack(&ChessMove {
-                            position,
-                            destination,
-                            move_type: MoveType::DoublePawnPush,
-                        }));
-                        continue;
-                    } else {
-                        move_buffer.push(ChessMove::pack(&ChessMove {
-                            position,
-                            destination,
-                            move_type: MoveType::Capture,
-                        }));
-                        continue;
-                    }
+            let is_long_move = match piece {
+                Pieces::WhitePawn => {
+                    self.lookup_tables[LookupTable::WhitePawnLongMoves as usize][position as usize]
+                        & (1 << destination)
+                        != 0
                 }
+                Pieces::BlackPawn => {
+                    self.lookup_tables[LookupTable::BlackPawnLongMoves as usize][position as usize]
+                        & (1 << destination)
+                        != 0
+                }
+                _ => false,
+            };
 
+            if is_long_move {
                 move_buffer.push(ChessMove::pack(&ChessMove {
                     position,
-                    destination,
-                    move_type: MoveType::Capture,
+                    destination: destination as u8,
+                    move_type: MoveType::DoublePawnPush,
                 }));
+                continue;
             }
+
+            move_buffer.push(ChessMove::pack(&ChessMove {
+                position,
+                destination: destination as u8,
+                move_type: MoveType::Capture,
+            }));
         }
 
         move_buffer
