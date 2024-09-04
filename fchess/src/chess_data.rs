@@ -1,5 +1,3 @@
-use std::fs::DirBuilder;
-
 // The nice thing about bitboards is that it doesn't matter how you generate them as they are only calculated once, a lot of this is inefficient or strange
 // This should probably be some form of bootstrapping instead of generating it on launch.
 use crate::data::*;
@@ -26,10 +24,26 @@ pub fn generate_data() -> [[u64; 64]; 12] {
     ]
 }
 
+#[allow(dead_code)]
+pub enum LookupTable {
+    KingMoves,
+    QueenMoves,
+    RookMoves,
+    BishopMoves,
+    KnightMoves,
+    WhitePawnMoves,
+    WhitePawnCaptures,
+    BlackPawnMoves,
+    BlackPawnCaptures,
+    WhitePawnLongMoves,
+    BlackPawnLongMoves,
+    Blank,
+}
+
 fn generate_long_pawn_moves(color: Color) -> [u64; 64] {
     let mut moves = [0; 64];
 
-    for position in 0..64 {
+    for (position, pawn_move) in moves.iter_mut().enumerate() {
         let direction: i32 = match color {
             Color::White => 8,
             Color::Black => -8,
@@ -39,7 +53,7 @@ fn generate_long_pawn_moves(color: Color) -> [u64; 64] {
             Color::Black => position / 8 == 6,
         };
         if on_rank {
-            moves[position] = 1 << (position as i32 + direction * 2);
+            *pawn_move = 1 << (position as i32 + direction * 2);
         }
     }
 

@@ -11,7 +11,7 @@ Required rules to be implemented:
 * ~~En Passant~~
 
 Future implementation:
-* Tests
-* [Perft](https://www.chessprogramming.org/Perft)
+* ~~Tests~~
+* ~~[Perft](https://www.chessprogramming.org/Perft)~~
 * [Minimax evaluation algorithm](https://www.chessprogramming.org/Minimax)
 * [Magic bitboards](https://www.chessprogramming.org/Magic_Bitboards)

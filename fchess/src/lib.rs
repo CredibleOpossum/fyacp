@@ -1,5 +1,4 @@
 mod chess_data;
-use std::path::absolute;
 
 use chess_data::generate_data;
 
@@ -59,17 +58,17 @@ impl Board {
         }
         mask
     }
+
     pub fn print_board(&self) {
         let mut text_representation = self.get_text_representation();
         text_representation.reverse();
 
         println!("----------");
-        for i in 0..64 {
-            let char = text_representation[i].clone();
-            if i % 8 == 0 {
+        for (char_pos, char) in text_representation.iter().enumerate() {
+            if char_pos % 8 == 0 {
                 println!();
             }
-            if char != String::default() {
+            if *char != String::default() {
                 print!("{} ", char);
             } else {
                 print!("  ");
@@ -124,11 +123,13 @@ impl Board {
             MoveType::QuietMove => todo!(),
             MoveType::DoublePawnPush => {
                 new_board.clear_square(chess_move.destination);
+                new_board.bitboards[piece_type as usize].set_bit(chess_move.destination);
             }
             MoveType::KingCastle => todo!(),
             MoveType::QueenCastle => todo!(),
             MoveType::Capture => {
                 new_board.clear_square(chess_move.destination);
+                new_board.bitboards[piece_type as usize].set_bit(chess_move.destination);
             }
             MoveType::EnPassant => {
                 let direction: i32 = match new_board.turn {
@@ -136,6 +137,7 @@ impl Board {
                     Color::Black => 16,
                 };
                 new_board.clear_square((self.en_passant.unwrap() as i32 + direction) as u8);
+                new_board.bitboards[piece_type as usize].set_bit(chess_move.destination);
             }
             MoveType::QueenPromotion => {
                 new_board.clear_square(chess_move.destination);
@@ -146,9 +148,33 @@ impl Board {
                         .set_bit(chess_move.destination),
                 };
             }
-            MoveType::RookPromotion => todo!(),
-            MoveType::BishopPromotion => todo!(),
-            MoveType::Knight => todo!(),
+            MoveType::RookPromotion => {
+                new_board.clear_square(chess_move.destination);
+                match self.turn {
+                    Color::White => new_board.bitboards[Pieces::WhiteRook as usize]
+                        .set_bit(chess_move.destination),
+                    Color::Black => new_board.bitboards[Pieces::BlackRook as usize]
+                        .set_bit(chess_move.destination),
+                };
+            }
+            MoveType::BishopPromotion => {
+                new_board.clear_square(chess_move.destination);
+                match self.turn {
+                    Color::White => new_board.bitboards[Pieces::WhiteBishop as usize]
+                        .set_bit(chess_move.destination),
+                    Color::Black => new_board.bitboards[Pieces::BlackBishop as usize]
+                        .set_bit(chess_move.destination),
+                };
+            }
+            MoveType::KnightPromotion => {
+                new_board.clear_square(chess_move.destination);
+                match self.turn {
+                    Color::White => new_board.bitboards[Pieces::WhiteKnight as usize]
+                        .set_bit(chess_move.destination),
+                    Color::Black => new_board.bitboards[Pieces::BlackKnight as usize]
+                        .set_bit(chess_move.destination),
+                };
+            }
         }
 
         if chess_move.move_type == MoveType::DoublePawnPush {
@@ -157,7 +183,6 @@ impl Board {
             new_board.en_passant = None;
         }
 
-        new_board.bitboards[piece_type as usize].set_bit(chess_move.destination);
         new_board.turn = new_board.switch_turn();
 
         new_board
@@ -202,7 +227,7 @@ impl Board {
         ray_cast_sum
     }
 
-    pub fn get_pseudolegal_move_mask(&self, position: u8) -> u64 {
+    pub fn get_pseudolegal_capture_mask(&self, position: u8) -> u64 {
         let piece_type = self.find_piece(position);
         let piece_type_id = piece_type as usize;
 
@@ -216,11 +241,12 @@ impl Board {
             1..2 => Color::Black,
             _ => panic!(),
         };
+
         if piece_color != self.turn {
             return 0;
         }
 
-        let lookup = [0, 1, 2, 3, 4, 9, 0, 1, 2, 3, 4, 9];
+        let lookup = [0, 1, 2, 3, 4, 11, 0, 1, 2, 3, 4, 11];
 
         let mut movement = self.lookup_tables[lookup[piece_type_id]][position as usize];
 
@@ -243,7 +269,7 @@ impl Board {
             Pieces::WhitePawn => {
                 movement |= self.lookup_tables[LookupTable::WhitePawnMoves as usize]
                     [position as usize]
-                    & (UNIVERSE ^ occupancy);
+                    & !occupancy;
 
                 movement |= self.lookup_tables[LookupTable::WhitePawnCaptures as usize]
                     [position as usize]
@@ -252,7 +278,7 @@ impl Board {
             Pieces::BlackPawn => {
                 movement |= self.lookup_tables[LookupTable::BlackPawnMoves as usize]
                     [position as usize]
-                    & (UNIVERSE ^ occupancy);
+                    & !occupancy;
 
                 movement |= self.lookup_tables[LookupTable::BlackPawnCaptures as usize]
                     [position as usize]
@@ -288,49 +314,41 @@ impl Board {
     }
 
     fn get_pseudolegal_moves(&self, position: u8) -> Vec<u16> {
-        let legal_move_mask = self.get_pseudolegal_move_mask(position);
-
+        let psuedolegal_capture_mask = self.get_pseudolegal_capture_mask(position);
         let mut move_buffer = Vec::new();
+
+        let piece = self.find_piece(position);
+        if self.en_passant.is_some() {
+            if piece == Pieces::WhitePawn
+                && self.lookup_tables[LookupTable::WhitePawnCaptures as usize][position as usize]
+                    & (1 << (self.en_passant.unwrap() - 8))
+                    != 0
+            {
+                move_buffer.push(ChessMove::pack(&ChessMove {
+                    position,
+                    destination: self.en_passant.unwrap() - 8,
+                    move_type: MoveType::EnPassant,
+                }));
+            }
+            if piece == Pieces::BlackPawn
+                && self.lookup_tables[LookupTable::BlackPawnCaptures as usize][position as usize]
+                    & (1 << (self.en_passant.unwrap() + 8))
+                    != 0
+            {
+                move_buffer.push(ChessMove::pack(&ChessMove {
+                    position,
+                    destination: self.en_passant.unwrap() + 8,
+                    move_type: MoveType::EnPassant,
+                }));
+            }
+        }
+
         for destination in 0..64 {
             let destination_mask = 1 << destination;
-            if legal_move_mask & destination_mask == 0 {
-                continue;
+            if psuedolegal_capture_mask & destination_mask == 0 {
+                continue; // Not psuedolegal
             }
             let piece = self.find_piece(position);
-            if self.en_passant.is_some() {
-                match piece {
-                    Pieces::WhitePawn => {
-                        if self.lookup_tables[LookupTable::WhitePawnCaptures as usize]
-                            [position as usize]
-                            & (1 << (self.en_passant.unwrap() - 8))
-                            != 0
-                        {
-                            move_buffer.push(ChessMove::pack(&ChessMove {
-                                position,
-                                destination: self.en_passant.unwrap() - 8,
-                                move_type: MoveType::EnPassant,
-                            }));
-                            continue;
-                        }
-                    }
-
-                    Pieces::BlackPawn => {
-                        if self.lookup_tables[LookupTable::BlackPawnCaptures as usize]
-                            [position as usize]
-                            & (1 << (self.en_passant.unwrap() + 8))
-                            != 0
-                        {
-                            move_buffer.push(ChessMove::pack(&ChessMove {
-                                position,
-                                destination: self.en_passant.unwrap() + 8,
-                                move_type: MoveType::EnPassant,
-                            }));
-                            continue;
-                        }
-                    }
-                    _ => {}
-                }
-            }
 
             let is_long_move = match piece {
                 Pieces::WhitePawn => {
@@ -355,6 +373,38 @@ impl Board {
                 continue;
             }
 
+            if piece == Pieces::WhitePawn || piece == Pieces::BlackPawn {
+                let last_rank = match piece {
+                    Pieces::WhitePawn => 7,
+                    Pieces::BlackPawn => 0,
+                    _ => panic!(),
+                };
+                let is_moving_to_last_rank = (destination / 8) == last_rank;
+                if is_moving_to_last_rank {
+                    move_buffer.push(ChessMove::pack(&ChessMove {
+                        position,
+                        destination: destination as u8,
+                        move_type: MoveType::QueenPromotion,
+                    }));
+                    move_buffer.push(ChessMove::pack(&ChessMove {
+                        position,
+                        destination: destination as u8,
+                        move_type: MoveType::RookPromotion,
+                    }));
+                    move_buffer.push(ChessMove::pack(&ChessMove {
+                        position,
+                        destination: destination as u8,
+                        move_type: MoveType::BishopPromotion,
+                    }));
+                    move_buffer.push(ChessMove::pack(&ChessMove {
+                        position,
+                        destination: destination as u8,
+                        move_type: MoveType::KnightPromotion,
+                    }));
+                    continue;
+                }
+            }
+
             move_buffer.push(ChessMove::pack(&ChessMove {
                 position,
                 destination: destination as u8,
@@ -368,7 +418,17 @@ impl Board {
     pub fn try_make_move(&mut self, position: u8, destination: u8) {
         let legal_moves = self.get_legal_moves(position);
         for possible_move in legal_moves {
-            if ChessMove::unpack(possible_move).destination == destination {
+            let parsed_move = ChessMove::unpack(possible_move);
+            dbg!(parsed_move);
+            match parsed_move.move_type {
+                MoveType::QueenPromotion => {}
+                MoveType::RookPromotion => continue,
+                MoveType::BishopPromotion => continue,
+                MoveType::KnightPromotion => continue,
+
+                _ => {}
+            }
+            if parsed_move.destination == destination {
                 *self = self.move_piece(possible_move);
             }
         }
@@ -391,12 +451,8 @@ impl Board {
             let king_bitmask = chess_move.find_kind_bitboard(chess_move.switch_turn());
 
             let mut enemy_bitmask = 0;
-            for enemy_bit in 0..64 {
-                let enemy_moves = chess_move.get_pseudolegal_moves(enemy_bit);
-                for possible_response in enemy_moves {
-                    let enemy_move_attack = ChessMove::unpack(possible_response).destination;
-                    enemy_bitmask |= 1 << enemy_move_attack;
-                }
+            for enemy_piece_position in 0..64 {
+                enemy_bitmask |= chess_move.get_pseudolegal_capture_mask(enemy_piece_position);
             }
 
             if enemy_bitmask & king_bitmask.0 == 0 {
@@ -428,5 +484,202 @@ impl Board {
         }
 
         text_representation
+    }
+
+    #[cfg(test)]
+    fn get_all_legal_moves(&self) -> Vec<u16> {
+        let mut move_buffer = Vec::new();
+
+        for position in 0..64 {
+            move_buffer.extend(self.get_legal_moves(position));
+        }
+
+        move_buffer
+    }
+    pub fn fen_parser(fen: &str) -> Board {
+        let mut board = Board::default();
+
+        let mut index: usize = 0;
+        let split_fen: Vec<&str> = fen.split(' ').collect();
+
+        for bitboard in 0..board.bitboards.len() {
+            board.bitboards[bitboard] = BitBoard(0);
+        }
+
+        for character in split_fen[0].chars().rev() {
+            if !split_fen[2].contains('Q') {
+                board.castling_rights.white_queenside = false;
+            }
+            if !split_fen[2].contains('K') {
+                board.castling_rights.white_kingside = false;
+            }
+            if !split_fen[2].contains('q') {
+                board.castling_rights.black_queenside = false;
+            }
+            if split_fen[2].contains('k') {
+                board.castling_rights.black_kingside = false;
+            }
+
+            match character {
+                'P' => board.bitboards[Pieces::WhitePawn as usize].0 |= 1 << index,
+                'p' => board.bitboards[Pieces::BlackPawn as usize].0 |= 1 << index,
+
+                'N' => board.bitboards[Pieces::WhiteKnight as usize].0 |= 1 << index,
+                'n' => board.bitboards[Pieces::BlackKnight as usize].0 |= 1 << index,
+
+                'B' => board.bitboards[Pieces::WhiteBishop as usize].0 |= 1 << index,
+                'b' => board.bitboards[Pieces::BlackBishop as usize].0 |= 1 << index,
+
+                'R' => board.bitboards[Pieces::WhiteRook as usize].0 |= 1 << index,
+                'r' => board.bitboards[Pieces::BlackRook as usize].0 |= 1 << index,
+
+                'Q' => board.bitboards[Pieces::WhiteQueen as usize].0 |= 1 << index,
+                'q' => board.bitboards[Pieces::BlackQueen as usize].0 |= 1 << index,
+
+                'K' => board.bitboards[Pieces::WhiteKing as usize].0 |= 1 << index,
+                'k' => board.bitboards[Pieces::BlackKing as usize].0 |= 1 << index,
+
+                '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' => {
+                    index += character.to_string().parse::<i32>().unwrap() as usize;
+                    continue;
+                }
+                _ => {
+                    continue;
+                }
+            }
+
+            index += 1;
+            if index >= 64 {
+                break;
+            }
+        }
+
+        let turn = match split_fen[1] {
+            "w" => Color::White,
+            "b" => Color::Black,
+            _ => panic!("Invaild fen, incorrect turn?"),
+        };
+
+        board.turn = turn;
+
+        board
+    }
+}
+
+#[cfg(test)]
+fn perft_internal(board: Board, depth: u8, max_depth: u8) -> usize {
+    let all_legal_moves = board.get_all_legal_moves();
+    if depth == max_depth {
+        return all_legal_moves.len();
+    }
+    if board.is_in_checkmate() {
+        return all_legal_moves.len();
+    }
+
+    let mut move_sum = 0;
+
+    for possible_move in &all_legal_moves {
+        let postmove = board.move_piece(*possible_move);
+        move_sum += perft_internal(postmove, depth + 1, max_depth);
+    }
+
+    move_sum
+}
+
+#[cfg(test)]
+fn perft(board: Board, depth: u8) -> usize {
+    let mut results = Vec::new();
+
+    let mut sum = 0;
+    let legal_moves = board.get_all_legal_moves();
+
+    for possible_move in legal_moves {
+        let move_count = if depth == 1 {
+            1
+        } else {
+            perft_internal(board.move_piece(possible_move), 1, depth - 1)
+        };
+        sum += move_count;
+        let parsed = ChessMove::unpack(possible_move);
+
+        results.push(format!(
+            "{}{}: {}",
+            human_readable_position(parsed.position),
+            human_readable_position(parsed.destination),
+            move_count
+        ))
+    }
+
+    results.sort(); // Maybe just do it in order so I can live print the results similar to stockfish's CLI.
+    for result in results {
+        println!("{}", result);
+    }
+
+    sum
+}
+
+pub fn human_readable_position(position: u8) -> String {
+    let first = match position % 8 {
+        0 => 'h',
+        1 => 'g',
+        2 => 'f',
+        3 => 'e',
+        4 => 'd',
+        5 => 'c',
+        6 => 'b',
+        7 => 'a',
+
+        _ => panic!(),
+    };
+
+    let second = match position / 8 {
+        0 => '1',
+        1 => '2',
+        2 => '3',
+        3 => '4',
+        4 => '5',
+        5 => '6',
+        6 => '7',
+        7 => '8',
+
+        _ => panic!(),
+    };
+
+    format!("{}{}", first, second)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    // https://www.chessprogramming.org/Perft_Results
+
+    #[test]
+    fn perft_base() {
+        let board = Board::default();
+        let move_count = perft(board, 5);
+        assert_eq!(move_count, 4_865_609);
+    }
+
+    #[test]
+    fn perft_no_castle() {
+        let board = Board::fen_parser("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - ");
+        let move_count = perft(board, 6);
+        assert_eq!(move_count, 11_030_083);
+    }
+
+    #[test]
+    fn perft_castling() {
+        let board = Board::fen_parser(
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+        );
+        let move_count = perft(board, 4);
+        assert_eq!(move_count, 4_185_552);
+    }
+
+    #[test]
+    fn perft_promotion() {
+        let board = Board::fen_parser("n1n5/PPPk4/8/8/8/8/4Kppp/5N1N b - - 0 1");
+        let move_count = perft(board, 5);
+        assert_eq!(move_count, 3_605_103);
     }
 }

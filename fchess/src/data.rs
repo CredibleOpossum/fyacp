@@ -1,5 +1,3 @@
-use std::default;
-
 use colored::Colorize;
 
 pub static EMPTY: u64 = 0;
@@ -35,7 +33,7 @@ pub enum MoveType {
     QueenPromotion,
     RookPromotion,
     BishopPromotion,
-    Knight,
+    KnightPromotion,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -72,7 +70,7 @@ impl ChessMove {
             6 => MoveType::QueenPromotion,
             7 => MoveType::RookPromotion,
             8 => MoveType::BishopPromotion,
-            9 => MoveType::Knight,
+            9 => MoveType::KnightPromotion,
             _ => panic!(),
         };
 
@@ -151,7 +149,7 @@ fn position_flatten(position: [i32; 2]) -> u8 {
 
 fn calculate_sliding(direction: [i32; 2]) -> [u64; 64] {
     let mut table = [0; 64];
-    for position in 0..BOARD_SIZE {
+    for (position, sliding) in table.iter_mut().enumerate().take(BOARD_SIZE) {
         let mut bitmap = BitBoard(0);
 
         let mut current_position = [position as i32 % 8, position as i32 / 8];
@@ -169,7 +167,7 @@ fn calculate_sliding(direction: [i32; 2]) -> [u64; 64] {
             }
         }
 
-        table[position] = bitmap.0;
+        *sliding = bitmap.0;
     }
     table
 }
@@ -252,6 +250,7 @@ impl BitBoard {
     }
 }
 
+#[allow(dead_code)]
 pub enum LookupTable {
     KingMoves,
     QueenMoves,

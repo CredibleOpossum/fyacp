@@ -3,7 +3,7 @@
 
 use eframe::egui;
 use egui::{vec2, Color32};
-use fchess::Board;
+use fchess::{human_readable_position, Board};
 
 static SPACING: egui::emath::Vec2 = vec2(1.0, 1.0);
 static BUTTON_SIZE: [f32; 2] = [64.0, 64.0];
@@ -17,6 +17,7 @@ fn main() -> eframe::Result {
     };
 
     let mut board = Board::default();
+    //let mut board = Board::default();
 
     let mut previous_colormap = 0;
     let mut previous_click: Option<u64> = None;
@@ -56,12 +57,18 @@ fn main() -> eframe::Result {
 
                         if row_ui.add_sized(BUTTON_SIZE, title).clicked() {
                             color_mask = board.get_legal_movement_mask(position_index as u8);
+                            //color_mask = board.get_pseudolegal_move_mask(position_index as u8);
 
                             if let Some(previous_click_position) = previous_click {
                                 board.try_make_move(
                                     previous_click_position as u8,
                                     position_index as u8,
                                 );
+                                println!(
+                                    "{}{}",
+                                    human_readable_position(previous_click_position as u8),
+                                    human_readable_position(position_index as u8)
+                                )
                             }
 
                             if color_mask != 0 {
@@ -74,7 +81,6 @@ fn main() -> eframe::Result {
                     }
                 });
             }
-
             if board.is_in_checkmate() {
                 ui.label(format!("{:?} wins!", board.switch_turn()));
                 return;
