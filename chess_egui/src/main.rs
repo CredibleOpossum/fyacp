@@ -3,7 +3,7 @@
 
 use eframe::egui;
 use egui::{vec2, Color32};
-use fchess::{human_readable_position, Board};
+use fchess::{human_readable_position, Board, BoardState, ChessTables};
 
 static SPACING: egui::emath::Vec2 = vec2(1.0, 1.0);
 static BUTTON_SIZE: [f32; 2] = [64.0, 64.0];
@@ -16,8 +16,9 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
 
-    let mut board = Board::default();
-    //let mut board = Board::default();
+    let tables = ChessTables::default();
+    let mut board =
+        Board::fen_parser("r3k2r/p1pp1pb1/bn2Pnp1/2q1N3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 1 2");
 
     let mut previous_colormap = 0;
     let mut previous_click: Option<u64> = None;
@@ -56,13 +57,15 @@ fn main() -> eframe::Result {
                         }
 
                         if row_ui.add_sized(BUTTON_SIZE, title).clicked() {
-                            color_mask = board.get_legal_movement_mask(position_index as u8);
+                            color_mask =
+                                board.get_legal_movement_mask(position_index as u8, &tables);
                             //color_mask = board.get_pseudolegal_move_mask(position_index as u8);
 
                             if let Some(previous_click_position) = previous_click {
                                 board.try_make_move(
                                     previous_click_position as u8,
                                     position_index as u8,
+                                    &tables,
                                 );
                                 println!(
                                     "{}{}",
@@ -81,9 +84,14 @@ fn main() -> eframe::Result {
                     }
                 });
             }
-            if board.is_in_checkmate() {
-                ui.label(format!("{:?} wins!", board.switch_turn()));
-                return;
+            match board.get_board_state(&tables) {
+                BoardState::Checkmate => {
+                    ui.label(format!("{:?} wins!", board.switch_turn()));
+                }
+                BoardState::Stalemate => {
+                    ui.label("Stalemate!");
+                }
+                BoardState::OnGoing => {}
             }
             ui.label("~Zander");
         });
