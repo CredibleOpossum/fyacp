@@ -79,16 +79,8 @@ fn generate_pawn_moves(color: Color) -> [u64; 64] {
             Color::Black => (position_bitmask & BOARD_BOTTOM) != 0,
         };
 
-        let on_rank = match color {
-            Color::White => position / 8 == 1,
-            Color::Black => position / 8 == 6,
-        };
-
         if !on_edge {
             movement.set_bit((position + direction).try_into().unwrap());
-            if on_rank {
-                movement.set_bit((position + direction * 2).try_into().unwrap());
-            }
         }
 
         moves[position as usize] = movement.0;

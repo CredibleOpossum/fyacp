@@ -18,7 +18,7 @@ fn main() -> eframe::Result {
 
     let tables = ChessTables::default();
     let mut board =
-        Board::fen_parser("r3k2r/p1pp1pb1/bn2Pnp1/2q1N3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 1 2");
+        Board::fen_parser("r3k2r/p1ppqpb1/1n2pnp1/3PN3/1P2P3/2N2Q1p/bPPBBPPP/R3K2R w KQkq - 1 3");
 
     let mut previous_colormap = 0;
     let mut previous_click: Option<u64> = None;
@@ -86,7 +86,7 @@ fn main() -> eframe::Result {
             }
             match board.get_board_state(&tables) {
                 BoardState::Checkmate => {
-                    ui.label(format!("{:?} wins!", board.switch_turn()));
+                    ui.label(format!("{:?} wins!", board.other_color()));
                 }
                 BoardState::Stalemate => {
                     ui.label("Stalemate!");

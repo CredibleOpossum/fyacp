@@ -16,6 +16,8 @@ pub static THICK_BOARD_BOTTOM: u64 = 0xFFFF;
 pub static THICK_BOARD_LEFT: u64 = 0xC0C0C0C0C0C0C0C0;
 pub static THICK_BOARD_RIGHT: u64 = 0x303030303030303;
 
+static NOT_EDGE: u64 = 0x7e7e7e7e7e7e00;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Color {
     White,

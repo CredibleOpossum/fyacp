@@ -5,6 +5,16 @@ use chess_data::generate_data;
 mod data;
 use data::*;
 
+const MAX_LEGAL_MOVES: usize = 195; // 195 is a resonable limit.
+
+#[derive(Debug)]
+struct Moves([u16; MAX_LEGAL_MOVES]);
+impl Default for Moves {
+    fn default() -> Self {
+        Moves([0_u16; MAX_LEGAL_MOVES])
+    }
+}
+
 pub enum BoardState {
     Checkmate,
     Stalemate,
@@ -13,7 +23,7 @@ pub enum BoardState {
 
 const EMPTY_STRING: String = String::new();
 #[derive(Clone, Copy, Debug)]
-pub struct CastlingRights {
+struct CastlingRights {
     white_queenside: bool,
     white_kingside: bool,
     black_queenside: bool,
@@ -31,7 +41,7 @@ impl Default for CastlingRights {
 }
 
 pub struct ChessTables {
-    lookup_tables: [[u64; 64]; 12], // This should be in some kind of meta object, not related directly to the rules/behavior of chess.
+    lookup_tables: [[u64; 64]; 12],
     other_tables: RaycastTables,
 }
 impl Default for ChessTables {
@@ -43,7 +53,7 @@ impl Default for ChessTables {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Board {
     bitboards: [BitBoard; 12],
     castling_rights: CastlingRights,
@@ -62,17 +72,60 @@ impl Default for Board {
     }
 }
 
+fn raycast_calculate(position: u8, occupancy: u64, tables: &ChessTables) -> u64 {
+    fn msb(x: u64) -> u32 {
+        63 - x.leading_zeros()
+    }
+    fn lsb(x: u64) -> u32 {
+        x.trailing_zeros()
+    }
+    let mut ray_cast_sum = 0;
+    for (ray_id, ray_table) in [
+        tables.other_tables.north_west,
+        tables.other_tables.north,
+        tables.other_tables.north_east,
+        tables.other_tables.west,
+        tables.other_tables.east,
+        tables.other_tables.south_west,
+        tables.other_tables.south,
+        tables.other_tables.south_east,
+    ]
+    .iter()
+    .enumerate()
+    {
+        let mut ray = occupancy & ray_table[position as usize];
+        if ray != 0 {
+            let r_pos = match ray_id {
+                0..4 => lsb(ray),
+                4..8 => msb(ray),
+                _ => panic!(),
+            };
+
+            ray = ray_table[r_pos as usize] ^ ray_table[position as usize];
+            ray_cast_sum |= ray;
+        } else {
+            ray_cast_sum |= ray_table[position as usize];
+        }
+    }
+
+    ray_cast_sum
+}
+
 impl Board {
     pub fn get_legal_movement_mask(&self, position: u8, tables: &ChessTables) -> u64 {
         let mut mask: u64 = 0;
-        for legal_move in self.get_legal_moves(position, tables) {
-            let legal_move_parsed = ChessMove::unpack(legal_move);
+        let moves = self.get_legal_moves(position, tables);
+        for legal_move in 0..MAX_LEGAL_MOVES {
+            if moves.0[legal_move] == 0 {
+                break;
+            }
+            let legal_move_parsed = ChessMove::unpack(moves.0[legal_move]);
             mask |= 1 << legal_move_parsed.destination;
         }
         mask
     }
 
-    pub fn print_board(&self) {
+    fn print_board(&self) {
         let mut text_representation = self.get_text_representation();
         text_representation.reverse();
 
@@ -90,28 +143,25 @@ impl Board {
         println!("\n----------");
     }
 
-    fn get_full_capture_mask(&self, tables: &ChessTables) -> u64 {
+    fn get_full_capture_mask(&self, color: Color, tables: &ChessTables) -> u64 {
         let mut board_capturemask = 0;
         for enemy_piece_position in 0..64 {
             board_capturemask |= self
-                .get_pseudolegal_capture_mask(enemy_piece_position, tables)
+                .get_pseudolegal_capture_mask(enemy_piece_position, color, tables)
                 .0;
         }
         board_capturemask
     }
 
     fn is_in_check(&self, tables: &ChessTables) -> bool {
-        let mut theoretical_position = *self;
-        theoretical_position.turn = theoretical_position.switch_turn();
-
-        let enemy_bitmask = theoretical_position.get_full_capture_mask(tables);
+        let enemy_bitmask = self.get_full_capture_mask(self.other_color(), tables);
 
         (self.find_kind_bitboard(self.turn).0 & enemy_bitmask) != 0
     }
 
     pub fn get_board_state(&self, tables: &ChessTables) -> BoardState {
         for possible_move in 0..64 {
-            if !self.get_legal_moves(possible_move, tables).is_empty() {
+            if !self.get_legal_moves(possible_move, tables).0[0] != 0 {
                 return BoardState::OnGoing;
             }
         }
@@ -123,13 +173,13 @@ impl Board {
         BoardState::Stalemate
     }
 
-    pub fn clear_square(&mut self, position: u8) {
+    fn clear_square(&mut self, position: u8) {
         for bitboard in &mut self.bitboards {
             bitboard.clear_bit(position);
         }
     }
 
-    pub fn find_piece(&self, position: u8) -> Pieces {
+    fn find_piece(&self, position: u8) -> Pieces {
         let mut piece_type = 0;
         for index in 0..12 {
             if self.bitboards[index].get_bit(position) {
@@ -142,16 +192,17 @@ impl Board {
         Pieces::from_u8(piece_type)
     }
 
-    pub fn switch_turn(&self) -> Color {
+    pub fn other_color(&self) -> Color {
         match self.turn {
             Color::White => Color::Black,
             Color::Black => Color::White,
         }
     }
 
-    pub fn move_piece(&self, chess_move: u16) -> Board {
+    fn move_piece(&self, chess_move: u16) -> Board {
         let chess_move = ChessMove::unpack(chess_move);
-        let mut new_board = *self;
+
+        let mut new_board = self.clone();
         let piece_type = new_board.find_piece(chess_move.position);
 
         new_board.bitboards[piece_type as usize].clear_bit(chess_move.position);
@@ -274,76 +325,32 @@ impl Board {
             _ => {}
         }
 
-        new_board.turn = new_board.switch_turn();
+        new_board.turn = new_board.other_color();
 
         new_board
     }
 
-    fn raycast_calculate(&self, position: u8, occupancy: u64, tables: &ChessTables) -> u64 {
-        fn msb(x: u64) -> u32 {
-            63 - x.leading_zeros()
-        }
-        fn lsb(x: u64) -> u32 {
-            x.trailing_zeros()
-        }
-        let mut ray_cast_sum = 0;
-        for (ray_id, ray_table) in [
-            tables.other_tables.north_west,
-            tables.other_tables.north,
-            tables.other_tables.north_east,
-            tables.other_tables.west,
-            tables.other_tables.east,
-            tables.other_tables.south_west,
-            tables.other_tables.south,
-            tables.other_tables.south_east,
-        ]
-        .iter()
-        .enumerate()
-        {
-            let mut ray = occupancy & ray_table[position as usize];
-            if ray != 0 {
-                let r_pos = match ray_id {
-                    0..4 => lsb(ray),
-                    4..8 => msb(ray),
-                    _ => panic!(),
-                };
-
-                ray = ray_table[r_pos as usize] ^ ray_table[position as usize];
-                ray_cast_sum |= ray;
-            } else {
-                ray_cast_sum |= ray_table[position as usize];
-            }
-        }
-
-        ray_cast_sum
-    }
-
-    pub fn get_pseudolegal_capture_mask(
+    fn get_pseudolegal_capture_mask(
         &self,
         position: u8,
+        color: Color,
         tables: &ChessTables,
     ) -> (u64, u64, u64) {
         let piece_type = self.find_piece(position);
-        let piece_type_id = piece_type as usize;
 
         if piece_type == Pieces::None {
-            // This is an empty square, no movement.
             return (0, 0, 0);
         }
 
-        let piece_color = match piece_type_id / 6 {
+        let piece_color = match piece_type as usize / 6 {
             0..1 => Color::White,
             1..2 => Color::Black,
             _ => panic!(),
         };
 
-        if piece_color != self.turn {
+        if piece_color != color {
             return (0, 0, 0);
         }
-
-        let lookup = [0, 1, 2, 3, 4, 6, 0, 1, 2, 3, 4, 8];
-
-        let mut movement = tables.lookup_tables[lookup[piece_type_id]][position as usize];
 
         let mut friendly_occupancy = 0;
         let mut enemy_occupancy = 0;
@@ -353,65 +360,91 @@ impl Board {
         for index in 6..12 {
             enemy_occupancy |= self.bitboards[index].0;
         }
-
-        if self.turn == Color::Black {
+        if color != Color::White {
             std::mem::swap(&mut friendly_occupancy, &mut enemy_occupancy);
         }
-
         let occupancy = friendly_occupancy | enemy_occupancy;
 
+        let lookup = [0, 1, 2, 3, 4, 6, 0, 1, 2, 3, 4, 8];
+        let mut movement_mask = 0;
         match piece_type {
+            Pieces::WhiteKing => {
+                movement_mask =
+                    tables.lookup_tables[LookupTable::KingMoves as usize][position as usize];
+                movement_mask &= !friendly_occupancy;
+            }
+            Pieces::BlackKing => {
+                movement_mask =
+                    tables.lookup_tables[LookupTable::KingMoves as usize][position as usize];
+                movement_mask &= !friendly_occupancy;
+            }
+
             Pieces::WhitePawn => {
-                movement |= tables.lookup_tables[LookupTable::WhitePawnMoves as usize]
+                movement_mask |= tables.lookup_tables[LookupTable::WhitePawnMoves as usize]
                     [position as usize]
                     & !occupancy;
 
-                movement |= tables.lookup_tables[LookupTable::WhitePawnCaptures as usize]
-                    [position as usize]
-                    & enemy_occupancy;
+                if tables.lookup_tables[LookupTable::WhitePawnMoves as usize][position as usize]
+                    & occupancy
+                    == 0
+                {
+                    movement_mask |= tables.lookup_tables[LookupTable::WhitePawnLongMoves as usize]
+                        [position as usize]
+                        & !occupancy;
+                }
+                movement_mask |=
+                    tables.lookup_tables[LookupTable::WhitePawnCaptures as usize][position as usize]
             }
+
             Pieces::BlackPawn => {
-                movement |= tables.lookup_tables[LookupTable::BlackPawnMoves as usize]
+                movement_mask |= tables.lookup_tables[LookupTable::BlackPawnMoves as usize]
                     [position as usize]
                     & !occupancy;
 
-                movement |= tables.lookup_tables[LookupTable::BlackPawnCaptures as usize]
+                if tables.lookup_tables[LookupTable::BlackPawnMoves as usize][position as usize]
+                    & occupancy
+                    == 0
+                {
+                    movement_mask |= tables.lookup_tables[LookupTable::BlackPawnLongMoves as usize]
+                        [position as usize]
+                        & !occupancy;
+                }
+                movement_mask |= tables.lookup_tables[LookupTable::BlackPawnCaptures as usize]
                     [position as usize]
                     & enemy_occupancy;
             }
-            _ => {}
-        }
 
-        let is_sliding_piece: bool = match Pieces::from_u8(piece_type as u8) {
-            Pieces::WhiteQueen
+            Pieces::WhiteKnight => {
+                movement_mask =
+                    tables.lookup_tables[LookupTable::KnightMoves as usize][position as usize];
+                movement_mask &= !friendly_occupancy;
+            }
+            Pieces::BlackKnight => {
+                movement_mask =
+                    tables.lookup_tables[LookupTable::KnightMoves as usize][position as usize];
+                movement_mask &= !friendly_occupancy;
+            }
+
+            Pieces::WhiteQueen // Sliding piece.
             | Pieces::WhiteRook
-            | Pieces::WhiteBishop
-            | Pieces::WhitePawn
+            | Pieces::WhiteBishop 
             | Pieces::BlackQueen
             | Pieces::BlackRook
-            | Pieces::BlackBishop
-            | Pieces::BlackPawn => true,
-
-            Pieces::WhiteKnight | Pieces::BlackKnight | Pieces::WhiteKing | Pieces::BlackKing => {
-                false
+            | Pieces::BlackBishop  => {
+                movement_mask = tables.lookup_tables[lookup[piece_type as usize]][position as usize];
+                movement_mask &= raycast_calculate(position, occupancy, tables);
+                movement_mask &= !friendly_occupancy;
             }
-
             Pieces::None => panic!(),
-        };
-
-        if is_sliding_piece {
-            movement &= self.raycast_calculate(position, occupancy, tables);
         }
-
-        movement &= UNIVERSE ^ friendly_occupancy;
-
-        (movement, friendly_occupancy, enemy_occupancy)
+        (movement_mask, friendly_occupancy, enemy_occupancy)
     }
 
-    fn get_pseudolegal_moves(&self, position: u8, tables: &ChessTables) -> Vec<u16> {
+    fn get_pseudolegal_moves(&self, position: u8, tables: &ChessTables) -> Moves {
         let (psuedolegal_capture_mask, friendly_occupacny, enemy_occupancy) =
-            self.get_pseudolegal_capture_mask(position, tables);
-        let mut move_buffer = Vec::new();
+            self.get_pseudolegal_capture_mask(position, self.turn, tables);
+        let mut move_buffer = Moves::default();
+        let mut move_position = 0;
 
         let piece = self.find_piece(position);
         if self.en_passant.is_some() {
@@ -420,22 +453,24 @@ impl Board {
                     & (1 << (self.en_passant.unwrap() - 8))
                     != 0
             {
-                move_buffer.push(ChessMove::pack(&ChessMove {
+                move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                     position,
                     destination: self.en_passant.unwrap() - 8,
                     move_type: MoveType::EnPassant,
-                }));
+                });
+                move_position += 1;
             }
             if piece == Pieces::BlackPawn
                 && tables.lookup_tables[LookupTable::BlackPawnCaptures as usize][position as usize]
                     & (1 << (self.en_passant.unwrap() + 8))
                     != 0
             {
-                move_buffer.push(ChessMove::pack(&ChessMove {
+                move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                     position,
                     destination: self.en_passant.unwrap() + 8,
                     move_type: MoveType::EnPassant,
-                }));
+                });
+                move_position += 1;
             }
         }
 
@@ -463,11 +498,12 @@ impl Board {
             };
 
             if is_long_move {
-                move_buffer.push(ChessMove::pack(&ChessMove {
+                move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                     position,
                     destination,
                     move_type: MoveType::DoublePawnPush,
-                }));
+                });
+                move_position += 1;
                 continue;
             }
 
@@ -483,43 +519,45 @@ impl Board {
                 };
                 let is_moving_to_last_rank = (destination / 8) == last_rank;
                 if is_moving_to_last_rank {
-                    move_buffer.push(ChessMove::pack(&ChessMove {
+                    move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                         position,
                         destination,
                         move_type: MoveType::QueenPromotion,
-                    }));
-                    move_buffer.push(ChessMove::pack(&ChessMove {
+                    });
+                    move_position += 1;
+                    move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                         position,
                         destination,
                         move_type: MoveType::RookPromotion,
-                    }));
-                    move_buffer.push(ChessMove::pack(&ChessMove {
+                    });
+                    move_position += 1;
+                    move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                         position,
                         destination,
                         move_type: MoveType::BishopPromotion,
-                    }));
-                    move_buffer.push(ChessMove::pack(&ChessMove {
+                    });
+                    move_position += 1;
+                    move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                         position,
                         destination,
                         move_type: MoveType::KnightPromotion,
-                    }));
+                    });
+                    move_position += 1;
                     continue;
                 }
             }
 
-            move_buffer.push(ChessMove::pack(&ChessMove {
+            move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                 position,
                 destination,
                 move_type: MoveType::Capture,
-            }));
+            });
+            move_position += 1;
         }
 
         // CASTLING
 
-        let mut fake_board = *self; // This dereference is probably super unperformant.
-        fake_board.turn = self.switch_turn();
-
-        let enemy_hitmask = fake_board.get_full_capture_mask(tables);
+        let enemy_hitmask = self.get_full_capture_mask(self.other_color(), tables);
 
         let blocking_pieces = enemy_occupancy | friendly_occupacny;
 
@@ -528,7 +566,7 @@ impl Board {
 
         // This is kinda ugly
         let white_kingside_hitmask: u64 = 0xe;
-        let white_queenside_hitmask: u64 = 0x78;
+        let white_queenside_hitmask: u64 = 0x38;
         let black_kingside_hitmask: u64 = 0xe00000000000000;
         let black_queenside_hitmask: u64 = 0x3800000000000000;
 
@@ -544,21 +582,22 @@ impl Board {
                         && (enemy_hitmask & white_kingside_hitmask) == 0
                         && (blocking_pieces & white_kingside_hitmask_friendly) == 0
                     {
-                        move_buffer.push(ChessMove::pack(&ChessMove {
+                        move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                             position: white_king_location_x,
                             destination: white_king_location_x - 2,
                             move_type: MoveType::KingCastle,
-                        }));
+                        });
+                        move_position += 1;
                     }
                     if self.castling_rights.white_queenside
                         && (enemy_hitmask & white_queenside_hitmask) == 0
                         && (blocking_pieces & white_queenside_hitmask_friendly) == 0
                     {
-                        move_buffer.push(ChessMove::pack(&ChessMove {
+                        move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                             position: white_king_location_x,
                             destination: white_king_location_x + 2,
                             move_type: MoveType::QueenCastle,
-                        }));
+                        });
                     }
                 }
             }
@@ -568,22 +607,23 @@ impl Board {
                         && (enemy_hitmask & black_kingside_hitmask) == 0
                         && (blocking_pieces & black_kingside_hitmask_friendly) == 0
                     {
-                        move_buffer.push(ChessMove::pack(&ChessMove {
+                        move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                             position: black_king_location_x,
                             destination: black_king_location_x - 2,
                             move_type: MoveType::KingCastle,
-                        }));
+                        });
+                        move_position += 1;
                     }
 
                     if self.castling_rights.black_queenside
                         && (enemy_hitmask & black_queenside_hitmask) == 0
                         && (blocking_pieces & black_queenside_hitmask_friendly) == 0
                     {
-                        move_buffer.push(ChessMove::pack(&ChessMove {
+                        move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                             position: black_king_location_x,
                             destination: black_king_location_x + 2,
                             move_type: MoveType::QueenCastle,
-                        }));
+                        });
                     }
                 }
             }
@@ -595,8 +635,11 @@ impl Board {
 
     pub fn try_make_move(&mut self, position: u8, destination: u8, tables: &ChessTables) {
         let legal_moves = self.get_legal_moves(position, tables);
-        for possible_move in legal_moves {
-            let parsed_move = ChessMove::unpack(possible_move);
+        for possible_move in 0..MAX_LEGAL_MOVES {
+            if legal_moves.0[possible_move] == 0 {
+                break;
+            }
+            let parsed_move = ChessMove::unpack(legal_moves.0[possible_move]);
             match parsed_move.move_type {
                 MoveType::QueenPromotion => {}
                 MoveType::RookPromotion => continue,
@@ -606,7 +649,7 @@ impl Board {
                 _ => {}
             }
             if parsed_move.destination == destination {
-                *self = self.move_piece(possible_move);
+                *self = self.move_piece(legal_moves.0[possible_move]);
             }
         }
     }
@@ -618,24 +661,32 @@ impl Board {
         }
     }
 
-    pub fn get_legal_moves(&self, position: u8, tables: &ChessTables) -> Vec<u16> {
+    fn get_legal_moves(&self, position: u8, tables: &ChessTables) -> Moves {
         let psuedo_legal_moves = self.get_pseudolegal_moves(position, tables);
+        //dbg!(psuedo_legal_moves.0[0]);
+        let mut legal_move_buffer = Moves::default();
+        let mut legal_move_index = 0;
 
-        let mut legal_move_buffer = Vec::new();
-        for psuedo_legal_move in &psuedo_legal_moves {
-            let chess_move = self.move_piece(*psuedo_legal_move);
+        for psuedo_legal_move_index in 0..MAX_LEGAL_MOVES {
+            if psuedo_legal_moves.0[psuedo_legal_move_index] == 0 {
+                // We hit a empty move, no other moves should be in front of it.
+                break;
+            }
+            let chess_move = self.move_piece(psuedo_legal_moves.0[psuedo_legal_move_index]);
 
-            let king_bitmask = chess_move.find_kind_bitboard(chess_move.switch_turn());
+            let king_bitmask = chess_move.find_kind_bitboard(chess_move.other_color());
 
             let mut enemy_bitmask = 0;
             for enemy_piece_position in 0..64 {
                 enemy_bitmask |= chess_move
-                    .get_pseudolegal_capture_mask(enemy_piece_position, tables)
+                    .get_pseudolegal_capture_mask(enemy_piece_position, chess_move.turn, tables)
                     .0;
             }
 
             if enemy_bitmask & king_bitmask.0 == 0 {
-                legal_move_buffer.push(*psuedo_legal_move)
+                legal_move_buffer.0[legal_move_index] =
+                    psuedo_legal_moves.0[psuedo_legal_move_index];
+                legal_move_index += 1;
             }
         }
 
@@ -667,10 +718,16 @@ impl Board {
 
     #[cfg(test)]
     fn get_all_legal_moves(&self, tables: &ChessTables) -> Vec<u16> {
-        let mut move_buffer = Vec::new();
+        let mut move_buffer: Vec<u16> = Vec::new();
 
         for position in 0..64 {
-            move_buffer.extend(self.get_legal_moves(position, tables));
+            let moves = self.get_legal_moves(position, tables);
+            for move_index in 0..MAX_LEGAL_MOVES {
+                if moves.0[move_index] == 0 {
+                    break;
+                }
+                move_buffer.push(moves.0[move_index]);
+            }
         }
 
         move_buffer
@@ -836,6 +893,26 @@ mod tests {
     use super::*;
     // https://www.chessprogramming.org/Perft_Results
 
+    /*
+    #[test]
+    fn perft_castling() {
+        let tables = ChessTables::default();
+        let board =
+            Board::fen_parser("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
+        let move_count = perft(board, 5, &tables);
+        assert_eq!(move_count,  193_690_690);
+    }
+    */
+
+    #[test]
+    fn perft_castling() {
+        let tables = ChessTables::default();
+        let board =
+            Board::fen_parser("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
+        let move_count = perft(board, 4, &tables);
+        assert_eq!(move_count, 4_085_603);
+    }
+
     #[test]
     fn perft_base() {
         let tables = ChessTables::default();
@@ -850,15 +927,6 @@ mod tests {
         let board = Board::fen_parser("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - ");
         let move_count = perft(board, 6, &tables);
         assert_eq!(move_count, 11_030_083);
-    }
-
-    #[test]
-    fn perft_castling() {
-        let tables = ChessTables::default();
-        let board =
-            Board::fen_parser("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
-        let move_count = perft(board, 4, &tables);
-        assert_eq!(move_count, 4_085_603);
     }
 
     #[test]

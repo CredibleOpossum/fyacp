@@ -7,6 +7,10 @@ edition = "2021"
 colored = "2"
 
 [profile.release]
-strip = true
 lto = true
 panic = "abort"
+debug = 2
+codegen-units = 1
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-Ctarget-cpu=native"]
