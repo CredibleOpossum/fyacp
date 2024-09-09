@@ -1,6 +1,9 @@
+#![allow(clippy::needless_range_loop)]
+use std::collections::{HashMap, HashSet};
+
 // The nice thing about bitboards is that it doesn't matter how you generate them as they are only calculated once, a lot of this is inefficient or strange
 // This should probably be some form of bootstrapping instead of generating it on launch.
-use crate::data::*;
+use crate::{data::*, ChessTables};
 use crate::{BitBoard, RaycastTables, EMPTY};
 
 pub fn generate_data() -> [[u64; 64]; 12] {
@@ -11,8 +14,8 @@ pub fn generate_data() -> [[u64; 64]; 12] {
     [
         generate_king_moves(),
         generate_queen_moves(),
-        generate_rook_moves(),
-        generate_bishop_moves(),
+        generate_rook_moves_short(),   // Magic friendly
+        generate_bishop_moves_short(), // Magic friendly
         generate_knight_moves(),
         generate_pawn_moves(Color::White),
         generate_pawn_captures(Color::White),
@@ -173,9 +176,32 @@ fn generate_king_moves() -> [u64; 64] {
     moves
 }
 
-fn generate_rook_moves() -> [u64; 64] {
+const TOP: u64 = 0xff00000000000000;
+const LEFT: u64 = 0x8080808080808080;
+const RIGHT: u64 = 0x101010101010101;
+const BOTTOM: u64 = 0xff;
+fn generate_rook_moves_short() -> [u64; 64] {
     let tables = RaycastTables::new();
+    let mut rook_moves = generate_rook_moves(&tables);
 
+    for position in 0..64 {
+        if (rook_moves[position] & TOP).count_ones() == 1 {
+            rook_moves[position] &= !TOP;
+        }
+        if (rook_moves[position] & LEFT).count_ones() == 1 {
+            rook_moves[position] &= !LEFT;
+        }
+        if (rook_moves[position] & RIGHT).count_ones() == 1 {
+            rook_moves[position] &= !RIGHT;
+        }
+        if (rook_moves[position] & BOTTOM).count_ones() == 1 {
+            rook_moves[position] &= !BOTTOM;
+        }
+    }
+
+    rook_moves
+}
+fn generate_rook_moves(tables: &RaycastTables) -> [u64; 64] {
     let mut north = tables.north;
     let west = tables.west;
     let east = tables.east;
@@ -203,8 +229,30 @@ fn generate_bishop_moves() -> [u64; 64] {
     north_west
 }
 
+fn generate_bishop_moves_short() -> [u64; 64] {
+    let mut rook_moves = generate_bishop_moves();
+
+    for position in 0..64 {
+        if (rook_moves[position] & TOP).count_ones() == 1 {
+            rook_moves[position] &= !TOP;
+        }
+        if (rook_moves[position] & LEFT).count_ones() == 1 {
+            rook_moves[position] &= !LEFT;
+        }
+        if (rook_moves[position] & RIGHT).count_ones() == 1 {
+            rook_moves[position] &= !RIGHT;
+        }
+        if (rook_moves[position] & BOTTOM).count_ones() == 1 {
+            rook_moves[position] &= !BOTTOM;
+        }
+    }
+
+    rook_moves
+}
+
 fn generate_queen_moves() -> [u64; 64] {
-    let mut straight = generate_rook_moves();
+    let tables = RaycastTables::new();
+    let mut straight = generate_rook_moves(&tables);
     let diagonal = generate_bishop_moves();
     for index in 0..straight.len() {
         straight[index] |= diagonal[index];

@@ -16,8 +16,6 @@ pub static THICK_BOARD_BOTTOM: u64 = 0xFFFF;
 pub static THICK_BOARD_LEFT: u64 = 0xC0C0C0C0C0C0C0C0;
 pub static THICK_BOARD_RIGHT: u64 = 0x303030303030303;
 
-static NOT_EDGE: u64 = 0x7e7e7e7e7e7e00;
-
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Color {
     White,
@@ -219,6 +217,7 @@ impl BitBoard {
         self.0 & (1 << bit_index) != 0
     }
 
+    /*
     fn print_internal(&self, highlighted_position: Option<u8>) {
         for bit in (0..64).rev() {
             // This is horrifying, probably should rework.
@@ -247,9 +246,11 @@ impl BitBoard {
     pub fn print(&self) {
         self.print_internal(None);
     }
+
     pub fn print_highlighting(&self, position: u8) {
         self.print_internal(Some(position));
     }
+    */
 }
 
 #[allow(dead_code)]

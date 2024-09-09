@@ -5,7 +5,9 @@ use chess_data::generate_data;
 mod data;
 use data::*;
 
-const MAX_LEGAL_MOVES: usize = 195; // 195 is a resonable limit.
+mod magics;
+
+const MAX_LEGAL_MOVES: usize = 195; // A resonable limit.
 
 #[derive(Debug)]
 struct Moves([u16; MAX_LEGAL_MOVES]);
@@ -55,10 +57,10 @@ impl Default for ChessTables {
 
 #[derive(Clone)]
 pub struct Board {
-    bitboards: [BitBoard; 12],
+    pub bitboards: [BitBoard; 12],
     castling_rights: CastlingRights,
-    en_passant: Option<u8>, // Denotes the position of where the en passant square can be captured
-    turn: Color,
+    pub en_passant: Option<u8>, // Denotes the position of where the en passant square can be captured
+    pub turn: Color,
 }
 
 impl Default for Board {
@@ -72,43 +74,18 @@ impl Default for Board {
     }
 }
 
-fn raycast_calculate(position: u8, occupancy: u64, tables: &ChessTables) -> u64 {
-    fn msb(x: u64) -> u32 {
-        63 - x.leading_zeros()
-    }
-    fn lsb(x: u64) -> u32 {
-        x.trailing_zeros()
-    }
-    let mut ray_cast_sum = 0;
-    for (ray_id, ray_table) in [
-        tables.other_tables.north_west,
-        tables.other_tables.north,
-        tables.other_tables.north_east,
-        tables.other_tables.west,
-        tables.other_tables.east,
-        tables.other_tables.south_west,
-        tables.other_tables.south,
-        tables.other_tables.south_east,
-    ]
-    .iter()
-    .enumerate()
-    {
-        let mut ray = occupancy & ray_table[position as usize];
-        if ray != 0 {
-            let r_pos = match ray_id {
-                0..4 => lsb(ray),
-                4..8 => msb(ray),
-                _ => panic!(),
-            };
+fn bishop_moves(position: u8, occupancy: u64, tables: &ChessTables) -> u64 {
+    let movement_mask = tables.lookup_tables[LookupTable::BishopMoves as usize][position as usize]; // Short rook bitmask
+    let key = ((movement_mask & occupancy).wrapping_mul(magics::MAGICS_BISHOP[position as usize]))
+        >> magics::MAGIC_SHIFT_BISHOP;
+    magics::LOOKUP_BISHOP[position as usize][key as usize]
+}
 
-            ray = ray_table[r_pos as usize] ^ ray_table[position as usize];
-            ray_cast_sum |= ray;
-        } else {
-            ray_cast_sum |= ray_table[position as usize];
-        }
-    }
-
-    ray_cast_sum
+fn rook_moves(position: u8, occupancy: u64, tables: &ChessTables) -> u64 {
+    let movement_mask = tables.lookup_tables[LookupTable::RookMoves as usize][position as usize]; // Short rook bitmask
+    let key = ((movement_mask & occupancy).wrapping_mul(magics::MAGICS_ROOK[position as usize]))
+        >> magics::MAGIC_SHIFT_ROOK;
+    magics::LOOKUP_ROOK[position as usize][key as usize]
 }
 
 impl Board {
@@ -125,6 +102,7 @@ impl Board {
         mask
     }
 
+    /*
     fn print_board(&self) {
         let mut text_representation = self.get_text_representation();
         text_representation.reverse();
@@ -142,6 +120,7 @@ impl Board {
         }
         println!("\n----------");
     }
+    */
 
     fn get_full_capture_mask(&self, color: Color, tables: &ChessTables) -> u64 {
         let mut board_capturemask = 0;
@@ -161,7 +140,7 @@ impl Board {
 
     pub fn get_board_state(&self, tables: &ChessTables) -> BoardState {
         for possible_move in 0..64 {
-            if !self.get_legal_moves(possible_move, tables).0[0] != 0 {
+            if self.get_legal_moves(possible_move, tables).0[0] != 0 {
                 return BoardState::OnGoing;
             }
         }
@@ -330,7 +309,7 @@ impl Board {
         new_board
     }
 
-    fn get_pseudolegal_capture_mask(
+    pub fn get_pseudolegal_capture_mask(
         &self,
         position: u8,
         color: Color,
@@ -425,14 +404,17 @@ impl Board {
                 movement_mask &= !friendly_occupancy;
             }
 
-            Pieces::WhiteQueen // Sliding piece.
-            | Pieces::WhiteRook
-            | Pieces::WhiteBishop 
-            | Pieces::BlackQueen
-            | Pieces::BlackRook
-            | Pieces::BlackBishop  => {
-                movement_mask = tables.lookup_tables[lookup[piece_type as usize]][position as usize];
-                movement_mask &= raycast_calculate(position, occupancy, tables);
+            Pieces::WhiteRook | Pieces::BlackRook => {
+                movement_mask = rook_moves(position, occupancy, tables);
+                movement_mask &= !friendly_occupancy;
+            }
+            Pieces::WhiteBishop | Pieces::BlackBishop => {
+                movement_mask = bishop_moves(position, occupancy, tables);
+                movement_mask &= !friendly_occupancy;
+            }
+            Pieces::WhiteQueen | Pieces::BlackQueen => {
+                movement_mask = rook_moves(position, occupancy, tables)
+                    | bishop_moves(position, occupancy, tables);
                 movement_mask &= !friendly_occupancy;
             }
             Pieces::None => panic!(),
@@ -900,7 +882,7 @@ mod tests {
         let board =
             Board::fen_parser("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
         let move_count = perft(board, 5, &tables);
-        assert_eq!(move_count,  193_690_690);
+        assert_eq!(move_count, 193_690_690);
     }
     */
 

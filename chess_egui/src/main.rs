@@ -1,12 +1,60 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 #![allow(rustdoc::missing_crate_level_docs)] // it's an example
 
+use colored::Colorize;
 use eframe::egui;
 use egui::{vec2, Color32};
 use fchess::{human_readable_position, Board, BoardState, ChessTables};
 
 static SPACING: egui::emath::Vec2 = vec2(1.0, 1.0);
 static BUTTON_SIZE: [f32; 2] = [64.0, 64.0];
+
+#[derive(Clone, Copy)]
+pub struct BitBoard(pub u64);
+
+impl BitBoard {
+    pub fn set_bit(&mut self, bit_index: u8) {
+        self.0 |= 1 << bit_index;
+    }
+    pub fn clear_bit(&mut self, bit_index: u8) {
+        self.0 &= u64::MAX ^ (1 << bit_index);
+    }
+    pub fn get_bit(&self, bit_index: u8) -> bool {
+        self.0 & (1 << bit_index) != 0
+    }
+
+    fn print_internal(&self, highlighted_position: Option<u8>) {
+        for bit in (0..64).rev() {
+            // This is horrifying, probably should rework.
+            let should_be_highlighted = if let Some(position) = highlighted_position {
+                position == bit
+            } else {
+                false
+            };
+
+            let bit_value = self.get_bit(bit);
+            if bit_value {
+                print!("{} ", (bit_value as i32).to_string().green());
+            } else if should_be_highlighted {
+                print!("{} ", (bit_value as i32).to_string().yellow());
+            } else {
+                print!("{} ", (bit_value as i32).to_string().red());
+            }
+
+            if bit % 8 == 0 {
+                println!();
+            }
+        }
+        println!("{}", self.0);
+    }
+
+    pub fn print(&self) {
+        self.print_internal(None);
+    }
+    pub fn print_highlighting(&self, position: u8) {
+        self.print_internal(Some(position));
+    }
+}
 
 fn main() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -18,7 +66,7 @@ fn main() -> eframe::Result {
 
     let tables = ChessTables::default();
     let mut board =
-        Board::fen_parser("r3k2r/p1ppqpb1/1n2pnp1/3PN3/1P2P3/2N2Q1p/bPPBBPPP/R3K2R w KQkq - 1 3");
+        Board::fen_parser("rnbqkbnr/pppppppp/4p3/4p3/4p3/4p3/PPPPpBKP/BBBBRBBB w HAkq - 0 1");
 
     let mut previous_colormap = 0;
     let mut previous_click: Option<u64> = None;
@@ -71,7 +119,7 @@ fn main() -> eframe::Result {
                                     "{}{}",
                                     human_readable_position(previous_click_position as u8),
                                     human_readable_position(position_index as u8)
-                                )
+                                );
                             }
 
                             if color_mask != 0 {
@@ -84,6 +132,7 @@ fn main() -> eframe::Result {
                     }
                 });
             }
+
             match board.get_board_state(&tables) {
                 BoardState::Checkmate => {
                     ui.label(format!("{:?} wins!", board.other_color()));
