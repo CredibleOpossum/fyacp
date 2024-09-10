@@ -44,17 +44,15 @@ impl Default for CastlingRights {
 
 pub struct ChessTables {
     lookup_tables: [[u64; 64]; 12],
-    other_tables: RaycastTables,
 }
 impl Default for ChessTables {
     fn default() -> Self {
         ChessTables {
             lookup_tables: generate_data(),
-            other_tables: RaycastTables::new(),
         }
     }
 }
-
+//
 #[derive(Clone)]
 pub struct Board {
     pub bitboards: [BitBoard; 12],

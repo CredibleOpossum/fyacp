@@ -2,7 +2,8 @@
 
 use std::{collections::HashSet, fs::File, io::Write};
 
-use rand::Rng;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 
 fn vaild_position(position: [i32; 2]) -> bool {
     (0..8).contains(&position[0]) && (0..8).contains(&position[1])
@@ -225,9 +226,7 @@ pub fn generate_blocker_data(
     output
 }
 
-fn random_u64() -> u64 {
-    let mut rng = rand::thread_rng();
-
+fn random_u64(rng: &mut ChaCha8Rng) -> u64 {
     rng.gen()
 }
 
@@ -237,8 +236,11 @@ fn main() {
     let data_rook = generate_blocker_data(generate_rook_moves_short(), generate_rook_moves()); // DO NOT LOOK AT THIS FUNCTION PLEASE
     let data_bishop = generate_blocker_data(generate_bishop_moves_short(), generate_bishop_moves());
 
-    let (magic_arr_rook, magics_rook) = gen_magics(data_rook, MAGIC_SHIFT_ROOK);
-    let (magic_arr_bishop, magics_bishop) = gen_magics(data_bishop, MAGIC_SHIFT_BISHOP);
+    let rng_rook = ChaCha8Rng::seed_from_u64(123); // Seeded random, could be optimized later.
+    let rng_bishop = ChaCha8Rng::seed_from_u64(123);
+
+    let (magic_arr_rook, magics_rook) = gen_magics(data_rook, MAGIC_SHIFT_ROOK, rng_rook);
+    let (magic_arr_bishop, magics_bishop) = gen_magics(data_bishop, MAGIC_SHIFT_BISHOP, rng_bishop);
 
     // Meta code generation
     let mut source_code: Vec<String> = Vec::new();
@@ -277,15 +279,21 @@ fn main() {
         .unwrap();
 }
 
-fn gen_magics(data: Vec<Vec<(u64, u64)>>, shift: usize) -> ([u64; 64], Vec<Vec<u64>>) {
+fn gen_magics(
+    data: Vec<Vec<(u64, u64)>>,
+    shift: usize,
+    mut rng: ChaCha8Rng,
+) -> ([u64; 64], Vec<Vec<u64>>) {
     let mut magic_arr = [0u64; 64];
     let mut magics = Vec::new();
+
     for (chess_position_index, result) in data.iter().enumerate() {
         'outer: loop {
             let mut seen_indexes = HashSet::new();
             let max_index_lookup = 1 << ((65 - shift) - 1); // Considering N bits the max uint would be this.
             let mut lookup_table = vec![0; max_index_lookup];
-            let magic = random_u64() & random_u64() & random_u64(); // Sparsely populated magics tend to be better.
+
+            let magic = random_u64(&mut rng) & random_u64(&mut rng) & random_u64(&mut rng); // Sparsely populated magics tend to be better.
             for position in result {
                 let index = (position.0).wrapping_mul(magic) >> shift;
 

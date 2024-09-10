@@ -19,7 +19,7 @@ pub enum Color {
     White,
     Black,
 }
-
+//
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum MoveType {
     QuietMove,
