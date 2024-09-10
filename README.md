@@ -3,7 +3,7 @@
 
 > [!Warning]
 >
-> Not completely implemented, will never be as fast as large engine's move generation such as [stockfish](https://github.com/official-stockfish/Stockfish).
+> Move generation will not be as fast as large engines such as [stockfish](https://github.com/official-stockfish/Stockfish).
 
 Required rules to be implemented:
 * ~~Castling~~
