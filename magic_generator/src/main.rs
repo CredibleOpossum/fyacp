@@ -204,7 +204,7 @@ pub fn generate_blocker_data(
         let max_number_from_bits: u64 = (1 << bit_list.len()) - 1;
 
         let mut position_all_possible_blockers = Vec::new();
-        for blocker_index in 0..(max_number_from_bits + 1) {
+        for blocker_index in 0..=max_number_from_bits {
             let mut blocker_pattern = 0;
             for bit in 0..bit_list.len() {
                 let bitmask: u64 = 1 << bit;
