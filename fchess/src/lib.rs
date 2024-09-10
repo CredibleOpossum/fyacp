@@ -52,7 +52,7 @@ impl Default for ChessTables {
         }
     }
 }
-//
+
 #[derive(Clone)]
 pub struct Board {
     pub bitboards: [BitBoard; 12],
