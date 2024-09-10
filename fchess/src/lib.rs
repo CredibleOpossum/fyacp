@@ -43,7 +43,7 @@ impl Default for CastlingRights {
 }
 
 pub struct ChessTables {
-    lookup_tables: [[u64; 64]; 12],
+    lookup_tables: [[BitBoard; 64]; 12],
 }
 impl Default for ChessTables {
     fn default() -> Self {
@@ -72,18 +72,18 @@ impl Default for Board {
     }
 }
 
-fn bishop_moves(position: u8, occupancy: u64, tables: &ChessTables) -> u64 {
+fn bishop_moves(position: u8, occupancy: BitBoard, tables: &ChessTables) -> BitBoard {
     let movement_mask = tables.lookup_tables[LookupTable::BishopMoves as usize][position as usize]; // Short rook bitmask
-    let key = ((movement_mask & occupancy).wrapping_mul(magics::MAGICS_BISHOP[position as usize]))
+    let key = ((movement_mask & occupancy) * BitBoard(magics::MAGICS_BISHOP[position as usize])).0
         >> magics::MAGIC_SHIFT_BISHOP;
-    magics::LOOKUP_BISHOP[position as usize][key as usize]
+    BitBoard(magics::LOOKUP_BISHOP[position as usize][key as usize])
 }
 
-fn rook_moves(position: u8, occupancy: u64, tables: &ChessTables) -> u64 {
+fn rook_moves(position: u8, occupancy: BitBoard, tables: &ChessTables) -> BitBoard {
     let movement_mask = tables.lookup_tables[LookupTable::RookMoves as usize][position as usize]; // Short rook bitmask
-    let key = ((movement_mask & occupancy).wrapping_mul(magics::MAGICS_ROOK[position as usize]))
+    let key = ((movement_mask & occupancy) * BitBoard(magics::MAGICS_ROOK[position as usize])).0
         >> magics::MAGIC_SHIFT_ROOK;
-    magics::LOOKUP_ROOK[position as usize][key as usize]
+    BitBoard(magics::LOOKUP_ROOK[position as usize][key as usize])
 }
 
 impl Board {
@@ -120,8 +120,8 @@ impl Board {
     }
     */
 
-    fn get_full_capture_mask(&self, color: Color, tables: &ChessTables) -> u64 {
-        let mut board_capturemask = 0;
+    fn get_full_capture_mask(&self, color: Color, tables: &ChessTables) -> BitBoard {
+        let mut board_capturemask = BitBoard(0);
         for enemy_piece_position in 0..64 {
             board_capturemask |= self
                 .get_pseudolegal_capture_mask(enemy_piece_position, color, tables)
@@ -133,7 +133,7 @@ impl Board {
     fn is_in_check(&self, tables: &ChessTables) -> bool {
         let enemy_bitmask = self.get_full_capture_mask(self.other_color(), tables);
 
-        (self.find_kind_bitboard(self.turn).0 & enemy_bitmask) != 0
+        (self.find_kind_bitboard(self.turn) & enemy_bitmask).is_empty()
     }
 
     pub fn get_board_state(&self, tables: &ChessTables) -> BoardState {
@@ -312,11 +312,11 @@ impl Board {
         position: u8,
         color: Color,
         tables: &ChessTables,
-    ) -> (u64, u64, u64) {
+    ) -> (BitBoard, BitBoard, BitBoard) {
         let piece_type = self.find_piece(position);
 
         if piece_type == Pieces::None {
-            return (0, 0, 0);
+            return (BitBoard(0), BitBoard(0), BitBoard(0));
         }
 
         let piece_color = match piece_type as usize / 6 {
@@ -326,23 +326,23 @@ impl Board {
         };
 
         if piece_color != color {
-            return (0, 0, 0);
+            return (BitBoard(0), BitBoard(0), BitBoard(0));
         }
 
-        let mut friendly_occupancy = 0;
-        let mut enemy_occupancy = 0;
+        let mut friendly_occupancy = BitBoard(0);
+        let mut enemy_occupancy = BitBoard(0);
         for index in 0..6 {
-            friendly_occupancy |= self.bitboards[index].0;
+            friendly_occupancy |= self.bitboards[index];
         }
         for index in 6..12 {
-            enemy_occupancy |= self.bitboards[index].0;
+            enemy_occupancy |= self.bitboards[index];
         }
         if color != Color::White {
             std::mem::swap(&mut friendly_occupancy, &mut enemy_occupancy);
         }
         let occupancy = friendly_occupancy | enemy_occupancy;
 
-        let mut movement_mask = 0;
+        let mut movement_mask = BitBoard(0);
         match piece_type {
             Pieces::WhiteKing => {
                 movement_mask =
@@ -360,9 +360,9 @@ impl Board {
                     [position as usize]
                     & !occupancy;
 
-                if tables.lookup_tables[LookupTable::WhitePawnMoves as usize][position as usize]
-                    & occupancy
-                    == 0
+                if (tables.lookup_tables[LookupTable::WhitePawnMoves as usize][position as usize]
+                    & occupancy)
+                    .is_empty()
                 {
                     movement_mask |= tables.lookup_tables[LookupTable::WhitePawnLongMoves as usize]
                         [position as usize]
@@ -377,9 +377,9 @@ impl Board {
                     [position as usize]
                     & !occupancy;
 
-                if tables.lookup_tables[LookupTable::BlackPawnMoves as usize][position as usize]
-                    & occupancy
-                    == 0
+                if (tables.lookup_tables[LookupTable::BlackPawnMoves as usize][position as usize]
+                    & occupancy)
+                    .is_empty()
                 {
                     movement_mask |= tables.lookup_tables[LookupTable::BlackPawnLongMoves as usize]
                         [position as usize]
@@ -428,9 +428,10 @@ impl Board {
         let piece = self.find_piece(position);
         if self.en_passant.is_some() {
             if piece == Pieces::WhitePawn
-                && tables.lookup_tables[LookupTable::WhitePawnCaptures as usize][position as usize]
-                    & (1 << (self.en_passant.unwrap() - 8))
-                    != 0
+                && !(tables.lookup_tables[LookupTable::WhitePawnCaptures as usize]
+                    [position as usize]
+                    & BitBoard(1 << (self.en_passant.unwrap() - 8)))
+                .is_empty()
             {
                 move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                     position,
@@ -440,9 +441,10 @@ impl Board {
                 move_position += 1;
             }
             if piece == Pieces::BlackPawn
-                && tables.lookup_tables[LookupTable::BlackPawnCaptures as usize][position as usize]
-                    & (1 << (self.en_passant.unwrap() + 8))
-                    != 0
+                && !(tables.lookup_tables[LookupTable::BlackPawnCaptures as usize]
+                    [position as usize]
+                    & BitBoard(1 << (self.en_passant.unwrap() + 8)))
+                .is_empty()
             {
                 move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                     position,
@@ -454,25 +456,21 @@ impl Board {
         }
 
         for destination in 0..64 {
-            let destination_mask = 1 << destination;
-            if psuedolegal_capture_mask & destination_mask == 0 {
+            let destination_mask = BitBoard(1 << destination);
+            if (psuedolegal_capture_mask & destination_mask).is_empty() {
                 continue; // Not psuedolegal
             }
             let piece = self.find_piece(position);
 
             let is_long_move = match piece {
-                Pieces::WhitePawn => {
-                    tables.lookup_tables[LookupTable::WhitePawnLongMoves as usize]
-                        [position as usize]
-                        & (1 << destination)
-                        != 0
-                }
-                Pieces::BlackPawn => {
-                    tables.lookup_tables[LookupTable::BlackPawnLongMoves as usize]
-                        [position as usize]
-                        & (1 << destination)
-                        != 0
-                }
+                Pieces::WhitePawn => !(tables.lookup_tables
+                    [LookupTable::WhitePawnLongMoves as usize][position as usize]
+                    & BitBoard(1 << destination))
+                .is_empty(),
+                Pieces::BlackPawn => !(tables.lookup_tables
+                    [LookupTable::BlackPawnLongMoves as usize][position as usize]
+                    & BitBoard(1 << destination))
+                .is_empty(),
                 _ => false,
             };
 
@@ -488,7 +486,7 @@ impl Board {
 
             if piece == Pieces::WhitePawn || piece == Pieces::BlackPawn {
                 let is_pawn_capture = (position % 8) != (destination % 8);
-                if is_pawn_capture && (((1 << destination) & enemy_occupancy) == 0) {
+                if is_pawn_capture && ((BitBoard(1 << destination) & enemy_occupancy).is_empty()) {
                     continue; // This isn't a legal pawn move, since it's capturing but not hitting an enemy.
                 }
                 let last_rank = match piece {
@@ -544,22 +542,22 @@ impl Board {
         let black_king_location_x = 3 + (7 * 8);
 
         // This is kinda ugly
-        let white_kingside_hitmask: u64 = 0xe;
-        let white_queenside_hitmask: u64 = 0x38;
-        let black_kingside_hitmask: u64 = 0xe00000000000000;
-        let black_queenside_hitmask: u64 = 0x3800000000000000;
+        let white_kingside_hitmask = BitBoard(0xe);
+        let white_queenside_hitmask = BitBoard(0x38);
+        let black_kingside_hitmask = BitBoard(0xe00000000000000);
+        let black_queenside_hitmask = BitBoard(0x3800000000000000);
 
-        let white_kingside_hitmask_friendly: u64 = 0x6;
-        let white_queenside_hitmask_friendly: u64 = 0x70;
-        let black_kingside_hitmask_friendly: u64 = 0x600000000000000;
-        let black_queenside_hitmask_friendly: u64 = 0x7000000000000000;
+        let white_kingside_hitmask_friendly = BitBoard(0x6);
+        let white_queenside_hitmask_friendly = BitBoard(0x70);
+        let black_kingside_hitmask_friendly = BitBoard(0x600000000000000);
+        let black_queenside_hitmask_friendly = BitBoard(0x7000000000000000);
 
         match piece {
             Pieces::WhiteKing => {
                 if self.turn == Color::White {
                     if self.castling_rights.white_kingside
-                        && (enemy_hitmask & white_kingside_hitmask) == 0
-                        && (blocking_pieces & white_kingside_hitmask_friendly) == 0
+                        && (enemy_hitmask & white_kingside_hitmask).is_empty()
+                        && (blocking_pieces & white_kingside_hitmask_friendly).is_empty()
                     {
                         move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                             position: white_king_location_x,
@@ -569,8 +567,8 @@ impl Board {
                         move_position += 1;
                     }
                     if self.castling_rights.white_queenside
-                        && (enemy_hitmask & white_queenside_hitmask) == 0
-                        && (blocking_pieces & white_queenside_hitmask_friendly) == 0
+                        && (enemy_hitmask & white_queenside_hitmask).is_empty()
+                        && (blocking_pieces & white_queenside_hitmask_friendly).is_empty()
                     {
                         move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                             position: white_king_location_x,
@@ -583,8 +581,8 @@ impl Board {
             Pieces::BlackKing => {
                 if self.turn == Color::Black {
                     if self.castling_rights.black_kingside
-                        && (enemy_hitmask & black_kingside_hitmask) == 0
-                        && (blocking_pieces & black_kingside_hitmask_friendly) == 0
+                        && (enemy_hitmask & black_kingside_hitmask).is_empty()
+                        && (blocking_pieces & black_kingside_hitmask_friendly).is_empty()
                     {
                         move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                             position: black_king_location_x,
@@ -595,8 +593,8 @@ impl Board {
                     }
 
                     if self.castling_rights.black_queenside
-                        && (enemy_hitmask & black_queenside_hitmask) == 0
-                        && (blocking_pieces & black_queenside_hitmask_friendly) == 0
+                        && (enemy_hitmask & black_queenside_hitmask).is_empty()
+                        && (blocking_pieces & black_queenside_hitmask_friendly).is_empty()
                     {
                         move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
                             position: black_king_location_x,
@@ -655,14 +653,14 @@ impl Board {
 
             let king_bitmask = chess_move.find_kind_bitboard(chess_move.other_color());
 
-            let mut enemy_bitmask = 0;
+            let mut enemy_bitmask = BitBoard(0);
             for enemy_piece_position in 0..64 {
                 enemy_bitmask |= chess_move
                     .get_pseudolegal_capture_mask(enemy_piece_position, chess_move.turn, tables)
                     .0;
             }
 
-            if enemy_bitmask & king_bitmask.0 == 0 {
+            if (enemy_bitmask & king_bitmask).is_empty() {
                 legal_move_buffer.0[legal_move_index] =
                     psuedo_legal_moves.0[psuedo_legal_move_index];
                 legal_move_index += 1;

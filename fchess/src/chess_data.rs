@@ -2,9 +2,9 @@
 // The nice thing about bitboards is that it doesn't matter how you generate them as they are only calculated once, a lot of this is inefficient or strange
 // This should probably be some form of bootstrapping instead of generating it on launch.
 use crate::data::*;
-use crate::{BitBoard, RaycastTables, EMPTY};
+use crate::{BitBoard, RaycastTables};
 
-pub fn generate_data() -> [[u64; 64]; 12] {
+pub fn generate_data() -> [[BitBoard; 64]; 12] {
     /*
     An array is basically required for performance / ergonomics but I should get rid of magic indexes
     Currently, the lookup table and the actual table could be desynced and cause painful bugs.
@@ -21,7 +21,7 @@ pub fn generate_data() -> [[u64; 64]; 12] {
         generate_pawn_captures(Color::Black),
         generate_long_pawn_moves(Color::White),
         generate_long_pawn_moves(Color::Black),
-        [EMPTY; 64],
+        [BitBoard(0); 64],
     ]
 }
 
@@ -41,8 +41,8 @@ pub enum LookupTable {
     Blank,
 }
 
-fn generate_long_pawn_moves(color: Color) -> [u64; 64] {
-    let mut moves = [0; 64];
+fn generate_long_pawn_moves(color: Color) -> [BitBoard; 64] {
+    let mut moves = [BitBoard(0); 64];
 
     for (position, pawn_move) in moves.iter_mut().enumerate() {
         let direction: i32 = match color {
@@ -54,16 +54,16 @@ fn generate_long_pawn_moves(color: Color) -> [u64; 64] {
             Color::Black => position / 8 == 6,
         };
         if on_rank {
-            *pawn_move = 1 << (position as i32 + direction * 2);
+            *pawn_move = BitBoard(1 << (position as i32 + direction * 2));
         }
     }
 
     moves
 }
 
-fn generate_pawn_moves(color: Color) -> [u64; 64] {
+fn generate_pawn_moves(color: Color) -> [BitBoard; 64] {
     // Includes invaild position, not sure how to handle.
-    let mut moves = [0; 64];
+    let mut moves = [BitBoard(0); 64];
 
     let direction: i32 = match color {
         Color::White => 8,
@@ -84,14 +84,14 @@ fn generate_pawn_moves(color: Color) -> [u64; 64] {
             movement.set_bit((position + direction).try_into().unwrap());
         }
 
-        moves[position as usize] = movement.0;
+        moves[position as usize] = movement;
     }
     moves
 }
 
-fn generate_pawn_captures(color: Color) -> [u64; 64] {
+fn generate_pawn_captures(color: Color) -> [BitBoard; 64] {
     // Pawns can't legally exist in certain locations which this code doesn't accoutn for, an illegal position shouldn't
-    let mut moves = [0u64; 64];
+    let mut moves = [BitBoard(0); 64];
     for position in 0..64 {
         let mut movement = BitBoard(0);
 
@@ -124,14 +124,14 @@ fn generate_pawn_captures(color: Color) -> [u64; 64] {
             movement.set_bit((position + direction_second).try_into().unwrap());
         }
 
-        moves[position as usize] = movement.0;
+        moves[position as usize] = movement;
     }
 
     moves
 }
 
-fn generate_king_moves() -> [u64; 64] {
-    let mut moves = [0u64; 64];
+fn generate_king_moves() -> [BitBoard; 64] {
+    let mut moves = [BitBoard(0); 64];
     for position in 0..64 {
         let bit_position = 1 << position;
 
@@ -169,78 +169,88 @@ fn generate_king_moves() -> [u64; 64] {
             movement.set_bit(position - 9)
         }
 
-        moves[position as usize] = movement.0;
+        moves[position as usize] = movement;
     }
     moves
 }
 
-const TOP: u64 = 0xff00000000000000;
-const LEFT: u64 = 0x8080808080808080;
-const RIGHT: u64 = 0x101010101010101;
-const BOTTOM: u64 = 0xff;
-fn generate_rook_moves_short() -> [u64; 64] {
+const TOP: BitBoard = BitBoard(0xff00000000000000);
+const LEFT: BitBoard = BitBoard(0x8080808080808080);
+const RIGHT: BitBoard = BitBoard(0x101010101010101);
+const BOTTOM: BitBoard = BitBoard(0xff);
+fn generate_rook_moves_short() -> [BitBoard; 64] {
     let tables = RaycastTables::new();
     let mut rook_moves = generate_rook_moves(&tables);
 
     for position in 0..64 {
-        if (rook_moves[position] & TOP).count_ones() == 1 {
+        if (rook_moves[position] & TOP).0.count_ones() == 1 {
             rook_moves[position] &= !TOP;
         }
-        if (rook_moves[position] & LEFT).count_ones() == 1 {
+        if (rook_moves[position] & LEFT).0.count_ones() == 1 {
             rook_moves[position] &= !LEFT;
         }
-        if (rook_moves[position] & RIGHT).count_ones() == 1 {
+        if (rook_moves[position] & RIGHT).0.count_ones() == 1 {
             rook_moves[position] &= !RIGHT;
         }
-        if (rook_moves[position] & BOTTOM).count_ones() == 1 {
+        if (rook_moves[position] & BOTTOM).0.count_ones() == 1 {
             rook_moves[position] &= !BOTTOM;
         }
     }
 
     rook_moves
 }
-fn generate_rook_moves(tables: &RaycastTables) -> [u64; 64] {
-    let mut north = tables.north;
+fn generate_rook_moves(tables: &RaycastTables) -> [BitBoard; 64] {
+    let mut rook_tables = [BitBoard(0); 64];
+
+    let north = tables.north;
     let west = tables.west;
     let east = tables.east;
     let south = tables.south;
 
     for position in 0..64 {
-        north[position] |= west[position] | east[position] | south[position];
+        rook_tables[position] =
+            BitBoard(north[position] | west[position] | east[position] | south[position]);
     }
 
-    north
+    rook_tables
 }
 
-fn generate_bishop_moves() -> [u64; 64] {
+fn generate_bishop_moves() -> [BitBoard; 64] {
     let tables = RaycastTables::new();
 
-    let mut north_west = tables.north_west;
+    let mut bishop_moves = [BitBoard(0); 64];
+
+    let north_west = tables.north_west;
     let north_east = tables.north_east;
     let south_west = tables.south_west;
     let south_east = tables.south_east;
 
     for position in 0..64 {
-        north_west[position] |= north_east[position] | south_west[position] | south_east[position];
+        bishop_moves[position] = BitBoard(
+            north_west[position]
+                | north_east[position]
+                | south_west[position]
+                | south_east[position],
+        );
     }
 
-    north_west
+    bishop_moves
 }
 
-fn generate_bishop_moves_short() -> [u64; 64] {
+fn generate_bishop_moves_short() -> [BitBoard; 64] {
     let mut rook_moves = generate_bishop_moves();
 
     for position in 0..64 {
-        if (rook_moves[position] & TOP).count_ones() == 1 {
+        if (rook_moves[position] & TOP).0.count_ones() == 1 {
             rook_moves[position] &= !TOP;
         }
-        if (rook_moves[position] & LEFT).count_ones() == 1 {
+        if (rook_moves[position] & LEFT).0.count_ones() == 1 {
             rook_moves[position] &= !LEFT;
         }
-        if (rook_moves[position] & RIGHT).count_ones() == 1 {
+        if (rook_moves[position] & RIGHT).0.count_ones() == 1 {
             rook_moves[position] &= !RIGHT;
         }
-        if (rook_moves[position] & BOTTOM).count_ones() == 1 {
+        if (rook_moves[position] & BOTTOM).0.count_ones() == 1 {
             rook_moves[position] &= !BOTTOM;
         }
     }
@@ -248,7 +258,7 @@ fn generate_bishop_moves_short() -> [u64; 64] {
     rook_moves
 }
 
-fn generate_queen_moves() -> [u64; 64] {
+fn generate_queen_moves() -> [BitBoard; 64] {
     let tables = RaycastTables::new();
     let mut straight = generate_rook_moves(&tables);
     let diagonal = generate_bishop_moves();
@@ -259,8 +269,8 @@ fn generate_queen_moves() -> [u64; 64] {
     straight
 }
 
-fn generate_knight_moves() -> [u64; 64] {
-    let mut moves = [0u64; 64];
+fn generate_knight_moves() -> [BitBoard; 64] {
+    let mut moves = [BitBoard(0); 64];
     for position in 0..64 {
         let mut movement = BitBoard(0);
         let bit_position = 1 << position;
@@ -307,7 +317,7 @@ fn generate_knight_moves() -> [u64; 64] {
             movement.set_bit(position - 6);
         }
 
-        moves[position as usize] = movement.0;
+        moves[position as usize] = movement;
     }
     moves
 }
