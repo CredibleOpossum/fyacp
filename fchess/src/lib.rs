@@ -344,7 +344,6 @@ impl Board {
         }
         let occupancy = friendly_occupancy | enemy_occupancy;
 
-        let lookup = [0, 1, 2, 3, 4, 6, 0, 1, 2, 3, 4, 8];
         let mut movement_mask = 0;
         match piece_type {
             Pieces::WhiteKing => {

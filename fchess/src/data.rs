@@ -1,5 +1,3 @@
-use colored::Colorize;
-
 pub static EMPTY: u64 = 0;
 pub static UNIVERSE: u64 = u64::MAX;
 

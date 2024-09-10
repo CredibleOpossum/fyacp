@@ -1,9 +1,7 @@
 #![allow(clippy::needless_range_loop)]
-use std::collections::{HashMap, HashSet};
-
 // The nice thing about bitboards is that it doesn't matter how you generate them as they are only calculated once, a lot of this is inefficient or strange
 // This should probably be some form of bootstrapping instead of generating it on launch.
-use crate::{data::*, ChessTables};
+use crate::data::*;
 use crate::{BitBoard, RaycastTables, EMPTY};
 
 pub fn generate_data() -> [[u64; 64]; 12] {
