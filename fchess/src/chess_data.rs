@@ -1,8 +1,8 @@
 #![allow(clippy::needless_range_loop)]
 // The nice thing about bitboards is that it doesn't matter how you generate them as they are only calculated once, a lot of this is inefficient or strange
 // This should probably be some form of bootstrapping instead of generating it on launch.
-use crate::data::*;
-use crate::{BitBoard, RaycastTables};
+use crate::RaycastTables;
+use crate::{bitboard::BitBoard, data::*};
 
 pub fn generate_data() -> [[BitBoard; 64]; 12] {
     /*

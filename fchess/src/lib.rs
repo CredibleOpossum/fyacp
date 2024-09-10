@@ -5,6 +5,9 @@ use chess_data::generate_data;
 mod data;
 use data::*;
 
+mod bitboard;
+use bitboard::BitBoard;
+
 mod magics;
 
 const MAX_LEGAL_MOVES: usize = 195; // A resonable limit.
