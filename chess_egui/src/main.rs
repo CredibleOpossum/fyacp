@@ -65,8 +65,7 @@ fn main() -> eframe::Result {
     };
 
     let tables = ChessTables::default();
-    let mut board =
-        Board::fen_parser("rnbqkbnr/pppppppp/4p3/4p3/4p3/4p3/PPPPpBKP/BBBBRBBB w HAkq - 0 1");
+    let mut board = Board::fen_parser("8/7r/2pp4/KPQ5/5p1k/8/4P1P1/8 w - - 2 3");
 
     let mut previous_colormap = 0;
     let mut previous_click: Option<u64> = None;
@@ -133,15 +132,15 @@ fn main() -> eframe::Result {
                 });
             }
 
-            match board.get_board_state(&tables) {
-                BoardState::Checkmate => {
-                    ui.label(format!("{:?} wins!", board.other_color()));
-                }
-                BoardState::Stalemate => {
-                    ui.label("Stalemate!");
-                }
-                BoardState::OnGoing => {}
-            }
+            //match board.get_board_state(&tables) {
+            //    BoardState::Checkmate => {
+            //        ui.label(format!("{:?} wins!", board.other_color()));
+            //    }
+            //    BoardState::Stalemate => {
+            //        ui.label("Stalemate!");
+            //    }
+            //    BoardState::OnGoing => {}
+            //}
             ui.label("~Zander");
         });
     })

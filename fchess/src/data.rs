@@ -20,6 +20,15 @@ pub enum Color {
     White,
     Black,
 }
+
+impl Color {
+    pub fn opposite(&self) -> Color {
+        match self {
+            Color::White => Color::Black,
+            Color::Black => Color::White,
+        }
+    }
+}
 //
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum MoveType {
@@ -37,13 +46,13 @@ pub enum MoveType {
 
 #[derive(Clone, Copy, Debug)]
 pub struct ChessMove {
-    pub position: u8,
+    pub origin: u8,
     pub destination: u8,
     pub move_type: MoveType,
 }
 impl ChessMove {
     pub fn pack(&self) -> u16 {
-        let position: u16 = (self.position as u16 & 0b111111) << 10; // 6 bits
+        let position: u16 = (self.origin as u16 & 0b111111) << 10; // 6 bits
         let destination: u16 = (self.destination as u16 & 0b111111) << 4; // 6 bits
         let move_type: u16 = self.move_type as u16 & 0b1111; // 4 bits
 
@@ -74,64 +83,53 @@ impl ChessMove {
         };
 
         ChessMove {
-            position,
+            origin: position,
             destination,
             move_type,
         }
     }
 }
 
-pub static STARTING_POSITION: [BitBoard; 12] = [
-    BitBoard(8),
-    BitBoard(16),
-    BitBoard(129),
-    BitBoard(36),
-    BitBoard(66),
-    BitBoard(65280),
-    BitBoard(576460752303423488),
-    BitBoard(1152921504606846976),
-    BitBoard(9295429630892703744),
-    BitBoard(2594073385365405696),
-    BitBoard(4755801206503243776),
-    BitBoard(71776119061217280),
+pub static STARTING_POSITION: [[BitBoard; 6]; 2] = [
+    [
+        BitBoard(8),
+        BitBoard(16),
+        BitBoard(129),
+        BitBoard(36),
+        BitBoard(66),
+        BitBoard(65280),
+    ],
+    [
+        BitBoard(576460752303423488),
+        BitBoard(1152921504606846976),
+        BitBoard(9295429630892703744),
+        BitBoard(2594073385365405696),
+        BitBoard(4755801206503243776),
+        BitBoard(71776119061217280),
+    ],
 ];
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Pieces {
-    WhiteKing,
-    WhiteQueen,
-    WhiteRook,
-    WhiteBishop,
-    WhiteKnight,
-    WhitePawn,
-
-    BlackKing,
-    BlackQueen,
-    BlackRook,
-    BlackBishop,
-    BlackKnight,
-    BlackPawn,
-
+    King,
+    Queen,
+    Rook,
+    Bishop,
+    Knight,
+    Pawn,
     None,
 }
 impl Pieces {
     pub fn from_u8(index: u8) -> Pieces {
         match index {
-            0 => Pieces::WhiteKing,
-            1 => Pieces::WhiteQueen,
-            2 => Pieces::WhiteRook,
-            3 => Pieces::WhiteBishop,
-            4 => Pieces::WhiteKnight,
-            5 => Pieces::WhitePawn,
+            0 => Pieces::King,
+            1 => Pieces::Queen,
+            2 => Pieces::Rook,
+            3 => Pieces::Bishop,
+            4 => Pieces::Knight,
+            5 => Pieces::Pawn,
 
-            6 => Pieces::BlackKing,
-            7 => Pieces::BlackQueen,
-            8 => Pieces::BlackRook,
-            9 => Pieces::BlackBishop,
-            10 => Pieces::BlackKnight,
-            11 => Pieces::BlackPawn,
-
-            12 => Pieces::None,
+            6 => Pieces::None,
 
             _ => panic!("Attmpted to obtain piece from invaild id."),
         }
