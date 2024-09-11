@@ -17,13 +17,23 @@ impl BitBoard {
     pub fn set_bit(&mut self, bit_index: u8) {
         self.0 |= 1 << bit_index;
     }
+
     #[inline]
     pub fn clear_bit(&mut self, bit_index: u8) {
         self.0 &= UNIVERSE ^ (1 << bit_index);
     }
+
     #[inline]
     pub fn get_bit(&self, bit_index: u8) -> bool {
         self.0 & (1 << bit_index) != 0
+    }
+
+    #[inline]
+    pub fn get_index_and_pop(&mut self) -> u8 {
+        // Useful for efficient grabbing of bits;
+        let index = self.0.trailing_zeros();
+        self.0 ^= 1 << index;
+        index as u8
     }
 
     fn print_internal(&self, highlighted_position: Option<u8>) {

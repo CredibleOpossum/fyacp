@@ -711,8 +711,14 @@ impl Board {
     fn get_all_legal_moves(&self, tables: &ChessTables) -> Vec<u16> {
         let mut move_buffer: Vec<u16> = Vec::new();
 
-        for position in 0..64 {
-            let moves = self.get_legal_moves(position, tables);
+        let mut self_occupancy = match self.turn {
+            Color::White => self.get_white_occupancy(),
+            Color::Black => self.get_black_occupancy(),
+        };
+
+        while !self_occupancy.is_empty() {
+            let index = self_occupancy.get_index_and_pop();
+            let moves = self.get_legal_moves(index, tables);
             for move_index in 0..MAX_LEGAL_MOVES {
                 if moves.0[move_index] == 0 {
                     break;
@@ -724,7 +730,7 @@ impl Board {
         move_buffer
     }
     pub fn fen_parser(fen: &str) -> Board {
-        // Doesn't get parse en_passant square.
+        // Doesn't parse en_passant square.
         let mut board = Board::default();
 
         let mut index: usize = 0;
@@ -841,7 +847,7 @@ fn perft(board: Board, depth: u8, tables: &ChessTables) -> usize {
         ))
     }
 
-    results.sort(); // Maybe just do it in order so I can live print the results similar to stockfish's CLI.
+    results.sort();
     for result in results {
         println!("{}", result);
     }
