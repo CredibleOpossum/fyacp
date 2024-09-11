@@ -139,23 +139,35 @@ impl Board {
 
     fn get_full_capture_mask(&self, color: Color, tables: &ChessTables) -> BitBoard {
         let mut board_capturemask = BitBoard(0);
-        for enemy_piece_position in 0..64 {
-            board_capturemask |= self
-                .get_pseudolegal_capture_mask(enemy_piece_position, color, tables)
-                .0;
+
+        let mut occupancy = match color {
+            Color::White => self.get_white_occupancy(),
+            Color::Black => self.get_black_occupancy(),
+        };
+
+        while !occupancy.is_empty() {
+            let index = occupancy.get_index_and_pop();
+            board_capturemask |= self.get_pseudolegal_capture_mask(index, color, tables).0;
         }
+
         board_capturemask
     }
 
     fn is_in_check(&self, tables: &ChessTables) -> bool {
         let enemy_bitmask = self.get_full_capture_mask(self.other_color(), tables);
 
-        (self.find_kind_bitboard(self.turn) & enemy_bitmask).is_empty()
+        (self.find_kind_bitboard(self.turn.opposite()) & enemy_bitmask).is_empty()
     }
 
     pub fn get_board_state(&self, tables: &ChessTables) -> BoardState {
-        for possible_move in 0..64 {
-            if self.get_legal_moves(possible_move, tables).move_length != 0 {
+        let mut self_occupancy = match self.turn {
+            Color::White => self.get_white_occupancy(),
+            Color::Black => self.get_black_occupancy(),
+        };
+
+        while !self_occupancy.is_empty() {
+            let index = self_occupancy.get_index_and_pop();
+            if self.get_legal_moves(index, tables).move_length != 0 {
                 return BoardState::OnGoing;
             }
         }
@@ -332,15 +344,7 @@ impl Board {
         color: Color,
         tables: &ChessTables,
     ) -> (BitBoard, BitBoard, BitBoard) {
-        let (piece_type, piece_color) = self.find_piece(position);
-
-        if piece_type == Pieces::None {
-            return (BitBoard(0), BitBoard(0), BitBoard(0));
-        }
-
-        if piece_color != color {
-            return (BitBoard(0), BitBoard(0), BitBoard(0));
-        }
+        let (piece_type, _) = self.find_piece(position);
 
         let mut friendly_occupancy = self.get_white_occupancy();
         let mut enemy_occupancy = self.get_black_occupancy();
@@ -623,9 +627,9 @@ impl Board {
     }
 
     pub fn try_make_move(&mut self, position: u8, destination: u8, tables: &ChessTables) {
-        let legal_moves = self.get_legal_moves(position, tables);
-        for possible_move in 0..legal_moves.move_length {
-            let parsed_move = ChessMove::unpack(legal_moves.move_buffer[possible_move as usize]);
+        let legal_moves = self.get_all_legal_moves(tables);
+        for possible_move in 0..legal_moves.1 {
+            let parsed_move = ChessMove::unpack(legal_moves.0[possible_move]);
             match parsed_move.move_type {
                 MoveType::QueenPromotion => {}
                 MoveType::RookPromotion => continue,
@@ -634,9 +638,19 @@ impl Board {
 
                 _ => {}
             }
-            if parsed_move.destination == destination {
-                *self = self.move_piece(legal_moves.move_buffer[possible_move as usize]);
+            if parsed_move.origin == position && parsed_move.destination == destination {
+                *self = self.move_piece(legal_moves.0[possible_move]);
             }
+        }
+    }
+
+    pub fn get_legal_movement_mask_safe(&self, position: u8, tables: &ChessTables) -> BitBoard {
+        // This function exists because the regular one has no safety and will crash if the input isn't ideal
+        let (piece_type, color) = self.find_piece(position);
+        if self.turn != color || piece_type == Pieces::None {
+            BitBoard(0)
+        } else {
+            BitBoard(self.get_legal_movement_mask(position, tables))
         }
     }
 
@@ -656,9 +670,15 @@ impl Board {
             let king_bitmask = chess_move.find_kind_bitboard(chess_move.turn.opposite());
 
             let mut enemy_bitmask = BitBoard(0);
-            for enemy_piece_position in 0..64 {
+            let mut enemy_occupancy = match chess_move.turn {
+                Color::White => chess_move.get_white_occupancy(),
+                Color::Black => chess_move.get_black_occupancy(),
+            };
+
+            while !enemy_occupancy.is_empty() {
+                let index = enemy_occupancy.get_index_and_pop();
                 enemy_bitmask |= chess_move
-                    .get_pseudolegal_capture_mask(enemy_piece_position, chess_move.turn, tables)
+                    .get_pseudolegal_capture_mask(index, chess_move.turn, tables)
                     .0;
             }
 
@@ -706,7 +726,6 @@ impl Board {
         text_representation
     }
 
-    #[cfg(test)]
     fn get_all_legal_moves(&self, tables: &ChessTables) -> ([u16; MAX_MOVE_BUFFER], usize) {
         let mut move_buffer = [0; MAX_MOVE_BUFFER];
         let mut array_position: usize = 0;

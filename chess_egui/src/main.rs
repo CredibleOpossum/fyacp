@@ -65,8 +65,7 @@ fn main() -> eframe::Result {
     };
 
     let tables = ChessTables::default();
-    let mut board =
-        Board::fen_parser("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
+    let mut board = Board::fen_parser("3r2k1/5ppp/8/8/8/8/5PPP/2R3K1 w - - 2 2");
 
     let mut previous_colormap = 0;
     let mut previous_click: Option<u64> = None;
@@ -105,8 +104,9 @@ fn main() -> eframe::Result {
                         }
 
                         if row_ui.add_sized(BUTTON_SIZE, title).clicked() {
-                            color_mask =
-                                board.get_legal_movement_mask(position_index as u8, &tables);
+                            color_mask = board
+                                .get_legal_movement_mask_safe(position_index as u8, &tables)
+                                .0;
                             //color_mask = board.get_pseudolegal_move_mask(position_index as u8);
 
                             if let Some(previous_click_position) = previous_click {
