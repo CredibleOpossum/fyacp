@@ -13,10 +13,17 @@ mod magics;
 const MAX_LEGAL_MOVES: usize = 195; // A resonable limit.
 
 #[derive(Debug)]
-struct Moves([u16; MAX_LEGAL_MOVES]);
+struct Moves {
+    move_buffer: [u16; MAX_LEGAL_MOVES],
+    move_length: u8,
+}
+
 impl Default for Moves {
-    fn default() -> Self {
-        Moves([0_u16; MAX_LEGAL_MOVES])
+    fn default() -> Moves {
+        Moves {
+            move_buffer: [0u16; MAX_LEGAL_MOVES],
+            move_length: 0,
+        }
     }
 }
 
@@ -103,11 +110,8 @@ impl Board {
     pub fn get_legal_movement_mask(&self, position: u8, tables: &ChessTables) -> u64 {
         let mut mask: u64 = 0;
         let moves = self.get_legal_moves(position, tables);
-        for legal_move in 0..MAX_LEGAL_MOVES {
-            if moves.0[legal_move] == 0 {
-                break;
-            }
-            let legal_move_parsed = ChessMove::unpack(moves.0[legal_move]);
+        for legal_move in 0..moves.move_length {
+            let legal_move_parsed = ChessMove::unpack(moves.move_buffer[legal_move as usize]);
             mask |= 1 << legal_move_parsed.destination;
         }
         mask
@@ -151,7 +155,7 @@ impl Board {
 
     pub fn get_board_state(&self, tables: &ChessTables) -> BoardState {
         for possible_move in 0..64 {
-            if self.get_legal_moves(possible_move, tables).0[0] != 0 {
+            if self.get_legal_moves(possible_move, tables).move_length != 0 {
                 return BoardState::OnGoing;
             }
         }
@@ -190,7 +194,6 @@ impl Board {
 
     fn move_piece(&self, chess_move: u16) -> Board {
         let chess_move = ChessMove::unpack(chess_move);
-        println!("{:?}", chess_move.move_type);
 
         let mut new_board = self.clone();
         let (piece_type, color) = new_board.find_piece(chess_move.origin);
@@ -201,7 +204,6 @@ impl Board {
         match chess_move.move_type {
             MoveType::QuietMove => todo!(),
             MoveType::DoublePawnPush => {
-                //new_board.clear_square(chess_move.destination, color.opposite());
                 new_board.bitboards[color_index][piece_type as usize]
                     .set_bit(chess_move.destination);
             }
@@ -438,7 +440,7 @@ impl Board {
                         & BitBoard(1 << (self.en_passant.unwrap() - 8)))
                     .is_empty()
                     {
-                        move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
+                        move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                             origin: position,
                             destination: self.en_passant.unwrap() - 8,
                             move_type: MoveType::EnPassant,
@@ -452,7 +454,7 @@ impl Board {
                         & BitBoard(1 << (self.en_passant.unwrap() + 8)))
                     .is_empty()
                     {
-                        move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
+                        move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                             origin: position,
                             destination: self.en_passant.unwrap() + 8,
                             move_type: MoveType::EnPassant,
@@ -482,7 +484,7 @@ impl Board {
             };
 
             if piece == Pieces::Pawn && is_long_move {
-                move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
+                move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                     origin: position,
                     destination,
                     move_type: MoveType::DoublePawnPush,
@@ -503,25 +505,25 @@ impl Board {
                 let is_moving_to_last_rank =
                     piece == Pieces::Pawn && ((destination / 8) == last_rank);
                 if is_moving_to_last_rank {
-                    move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
+                    move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                         origin: position,
                         destination,
                         move_type: MoveType::QueenPromotion,
                     });
                     move_position += 1;
-                    move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
+                    move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                         origin: position,
                         destination,
                         move_type: MoveType::RookPromotion,
                     });
                     move_position += 1;
-                    move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
+                    move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                         origin: position,
                         destination,
                         move_type: MoveType::BishopPromotion,
                     });
                     move_position += 1;
-                    move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
+                    move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                         origin: position,
                         destination,
                         move_type: MoveType::KnightPromotion,
@@ -531,7 +533,7 @@ impl Board {
                 }
             }
 
-            move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
+            move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                 origin: position,
                 destination,
                 move_type: MoveType::Capture,
@@ -567,7 +569,7 @@ impl Board {
                             && (enemy_hitmask & white_kingside_hitmask).is_empty()
                             && (blocking_pieces & white_kingside_hitmask_friendly).is_empty()
                         {
-                            move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
+                            move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                                 origin: white_king_location_x,
                                 destination: white_king_location_x - 2,
                                 move_type: MoveType::KingCastle,
@@ -578,11 +580,12 @@ impl Board {
                             && (enemy_hitmask & white_queenside_hitmask).is_empty()
                             && (blocking_pieces & white_queenside_hitmask_friendly).is_empty()
                         {
-                            move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
+                            move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                                 origin: white_king_location_x,
                                 destination: white_king_location_x + 2,
                                 move_type: MoveType::QueenCastle,
                             });
+                            move_position += 1;
                         }
                     }
                 }
@@ -592,7 +595,7 @@ impl Board {
                             && (enemy_hitmask & black_kingside_hitmask).is_empty()
                             && (blocking_pieces & black_kingside_hitmask_friendly).is_empty()
                         {
-                            move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
+                            move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                                 origin: black_king_location_x,
                                 destination: black_king_location_x - 2,
                                 move_type: MoveType::KingCastle,
@@ -604,37 +607,35 @@ impl Board {
                             && (enemy_hitmask & black_queenside_hitmask).is_empty()
                             && (blocking_pieces & black_queenside_hitmask_friendly).is_empty()
                         {
-                            move_buffer.0[move_position] = ChessMove::pack(&ChessMove {
+                            move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                                 origin: black_king_location_x,
                                 destination: black_king_location_x + 2,
                                 move_type: MoveType::QueenCastle,
                             });
+                            move_position += 1;
                         }
                     }
                 }
             }
         }
-
+        move_buffer.move_length = move_position as u8;
         move_buffer
     }
 
     pub fn try_make_move(&mut self, position: u8, destination: u8, tables: &ChessTables) {
         let legal_moves = self.get_legal_moves(position, tables);
-        for possible_move in 0..MAX_LEGAL_MOVES {
-            if legal_moves.0[possible_move] == 0 {
-                break;
-            }
-            let parsed_move = ChessMove::unpack(legal_moves.0[possible_move]);
+        for possible_move in 0..legal_moves.move_length {
+            let parsed_move = ChessMove::unpack(legal_moves.move_buffer[possible_move as usize]);
             match parsed_move.move_type {
-                MoveType::QueenPromotion => continue,
+                MoveType::QueenPromotion => {}
                 MoveType::RookPromotion => continue,
-                MoveType::BishopPromotion => {}
+                MoveType::BishopPromotion => continue,
                 MoveType::KnightPromotion => continue,
 
                 _ => {}
             }
             if parsed_move.destination == destination {
-                *self = self.move_piece(legal_moves.0[possible_move]);
+                *self = self.move_piece(legal_moves.move_buffer[possible_move as usize]);
             }
         }
     }
@@ -648,12 +649,9 @@ impl Board {
         let mut legal_move_buffer = Moves::default();
         let mut legal_move_index = 0;
 
-        for psuedo_legal_move_index in 0..MAX_LEGAL_MOVES {
-            if psuedo_legal_moves.0[psuedo_legal_move_index] == 0 {
-                // We hit a empty move, no other moves should be in front of it.
-                break;
-            }
-            let chess_move = self.move_piece(psuedo_legal_moves.0[psuedo_legal_move_index]);
+        for psuedo_legal_move_index in 0..psuedo_legal_moves.move_length {
+            let chess_move =
+                self.move_piece(psuedo_legal_moves.move_buffer[psuedo_legal_move_index as usize]);
 
             let king_bitmask = chess_move.find_kind_bitboard(chess_move.turn.opposite());
 
@@ -665,12 +663,13 @@ impl Board {
             }
 
             if (enemy_bitmask & king_bitmask).is_empty() {
-                legal_move_buffer.0[legal_move_index] =
-                    psuedo_legal_moves.0[psuedo_legal_move_index];
+                legal_move_buffer.move_buffer[legal_move_index] =
+                    psuedo_legal_moves.move_buffer[psuedo_legal_move_index as usize];
                 legal_move_index += 1;
             }
         }
 
+        legal_move_buffer.move_length = legal_move_index as u8;
         legal_move_buffer
     }
 
@@ -708,8 +707,9 @@ impl Board {
     }
 
     #[cfg(test)]
-    fn get_all_legal_moves(&self, tables: &ChessTables) -> Vec<u16> {
-        let mut move_buffer: Vec<u16> = Vec::new();
+    fn get_all_legal_moves(&self, tables: &ChessTables) -> ([u16; MAX_MOVE_BUFFER], usize) {
+        let mut move_buffer = [0; MAX_MOVE_BUFFER];
+        let mut array_position: usize = 0;
 
         let mut self_occupancy = match self.turn {
             Color::White => self.get_white_occupancy(),
@@ -719,15 +719,18 @@ impl Board {
         while !self_occupancy.is_empty() {
             let index = self_occupancy.get_index_and_pop();
             let moves = self.get_legal_moves(index, tables);
-            for move_index in 0..MAX_LEGAL_MOVES {
-                if moves.0[move_index] == 0 {
-                    break;
-                }
-                move_buffer.push(moves.0[move_index]);
+
+            move_buffer[array_position..array_position + moves.move_length as usize]
+                .clone_from_slice(&moves.move_buffer[0..moves.move_length as usize]);
+            array_position += moves.move_length as usize;
+            /*
+            for move_index in 0..moves.move_length {
+                move_buffer.push(moves.move_buffer[move_index as usize]);
             }
+            */
         }
 
-        move_buffer
+        (move_buffer, array_position)
     }
     pub fn fen_parser(fen: &str) -> Board {
         // Doesn't parse en_passant square.
@@ -804,19 +807,19 @@ impl Board {
 fn perft_internal(board: Board, depth: u8, max_depth: u8, tables: &ChessTables) -> usize {
     let all_legal_moves = board.get_all_legal_moves(tables);
     if depth == max_depth {
-        return all_legal_moves.len();
+        return all_legal_moves.1;
     }
 
     match board.get_board_state(tables) {
-        BoardState::Checkmate => return all_legal_moves.len(),
-        BoardState::Stalemate => return all_legal_moves.len(),
+        BoardState::Checkmate => return all_legal_moves.1,
+        BoardState::Stalemate => return all_legal_moves.1,
         BoardState::OnGoing => {}
     }
 
     let mut move_sum = 0;
 
-    for possible_move in &all_legal_moves {
-        let postmove = board.move_piece(*possible_move);
+    for possible_move in 0..all_legal_moves.1 {
+        let postmove = board.move_piece(all_legal_moves.0[possible_move]);
         move_sum += perft_internal(postmove, depth + 1, max_depth, tables);
     }
 
@@ -830,14 +833,19 @@ fn perft(board: Board, depth: u8, tables: &ChessTables) -> usize {
     let mut sum = 0;
     let legal_moves = board.get_all_legal_moves(tables);
 
-    for possible_move in legal_moves {
+    for possible_move in 0..legal_moves.1 {
         let move_count = if depth == 1 {
             1
         } else {
-            perft_internal(board.move_piece(possible_move), 1, depth - 1, tables)
+            perft_internal(
+                board.move_piece(legal_moves.0[possible_move]),
+                1,
+                depth - 1,
+                tables,
+            )
         };
         sum += move_count;
-        let parsed = ChessMove::unpack(possible_move);
+        let parsed = ChessMove::unpack(legal_moves.0[possible_move]);
 
         results.push(format!(
             "{}{}: {}",

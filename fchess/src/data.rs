@@ -1,5 +1,7 @@
 use crate::bitboard::BitBoard;
 
+pub const MAX_MOVE_BUFFER: usize = 1024; // I have no idea why but smaller numbers are slower
+
 pub static UNIVERSE: u64 = u64::MAX;
 
 static BOARD_SIZE: usize = 64;
