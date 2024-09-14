@@ -69,7 +69,7 @@ fn main() -> eframe::Result {
     };
 
     let tables = ChessTables::default();
-    let mut board = Board::fen_parser("1k5r/ppp5/8/8/8/8/PPP5/1K1R4 w - - 0 1");
+    let mut board = Board::fen_parser("1k3r2/ppp5/8/8/8/8/PPP5/1K1R4 w - - 1 2");
 
     let mut previous_colormap = 0;
     let mut previous_click: Option<u64> = None;
@@ -77,7 +77,7 @@ fn main() -> eframe::Result {
 
     eframe::run_simple_native("Chess", options, move |ctx, _frame| {
         if board.get_board_state(&tables) == BoardState::OnGoing && board.turn == COMPUTER_COLOR {
-            let best_move = get_best_move(3, board.clone(), COMPUTER_COLOR, &tables);
+            let best_move = get_best_move(3, board.clone(), &tables);
             board = board.move_piece(best_move);
         }
         egui::CentralPanel::default().show(ctx, |ui| {

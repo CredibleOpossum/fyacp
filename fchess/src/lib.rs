@@ -1,6 +1,6 @@
 mod chess_data;
 
-use std::{i32, u32};
+use std::{i32, ops::IndexMut, u32};
 
 use chess_data::generate_data;
 
@@ -945,22 +945,20 @@ pub fn evaluate(board: &Board) -> i32 {
     black_value +=
         board.bitboards[Color::Black as usize][Pieces::Pawn as usize].popcnt() as i32 * PAWN_VALUE;
 
-    white_value - black_value
+    match board.turn {
+        Color::White => white_value - black_value,
+        Color::Black => black_value - white_value,
+    }
 }
 
-fn negamax(depth: usize, board: Board, tables: &ChessTables, optimizing_player: Color) -> i32 {
+fn negamax(depth: usize, board: Board, tables: &ChessTables) -> i32 {
     match board.get_board_state(tables) {
-        BoardState::Checkmate => {
-            return -9999;
-        }
-        BoardState::Stalemate => return 0,
+        BoardState::Checkmate => return -9999,
+        BoardState::Stalemate => return 0, // Equal position
         BoardState::OnGoing => {}
     }
     if depth == 0 {
-        return match board.turn {
-            Color::White => evaluate(&board),
-            Color::Black => -evaluate(&board),
-        };
+        return evaluate(&board);
     }
 
     let move_data = board.get_all_legal_moves(tables);
@@ -968,65 +966,41 @@ fn negamax(depth: usize, board: Board, tables: &ChessTables, optimizing_player: 
     let mut max = i32::MIN;
     for possible_move in 0..move_data.1 {
         let legal_move = move_data.0[possible_move];
-        let score = -negamax(
-            depth - 1,
-            board.move_piece(legal_move),
-            tables,
-            optimizing_player,
-        );
+        let score = -negamax(depth - 1, board.move_piece(legal_move), tables);
         max = std::cmp::max(max, score);
     }
 
     max
 }
 
-pub fn get_best_move(
-    depth: usize,
-    board: Board,
-    optimizing_player: Color,
-    tables: &ChessTables,
-) -> u16 {
-    print_move_rankings(depth, board.clone(), tables);
+pub fn get_best_move(depth: usize, board: Board, tables: &ChessTables) -> u16 {
     let mut scores = Vec::new();
     let move_data = board.get_all_legal_moves(tables);
     for possible_move in 0..move_data.1 {
         let legal_move = move_data.0[possible_move];
-        scores.push(negamax(
-            depth,
-            board.move_piece(legal_move),
-            tables,
-            optimizing_player,
-        ));
+        let new_board = board.move_piece(legal_move);
+        scores.push(-negamax(depth, new_board, tables));
     }
 
-    let mut min = i32::MAX;
-    let mut max_index = 0;
+    let mut best_score = i32::MIN;
+    let mut best_move_index = 0;
     for (index, score) in scores.iter().enumerate() {
-        if *score < min {
-            min = *score;
-            max_index = index;
+        let chess_move = ChessMove::unpack(move_data.0[index]);
+        let text = format!(
+            "{}{}",
+            human_readable_position(chess_move.origin),
+            human_readable_position(chess_move.destination)
+        );
+        println!("{}: {}", text, *score);
+        if *score > best_score {
+            println!("best move so far");
+            best_score = *score;
+            best_move_index = index;
         }
     }
 
-    move_data.0[max_index]
-}
-
-pub fn print_move_rankings(depth: usize, board: Board, tables: &ChessTables) {
-    let move_data = board.get_all_legal_moves(tables);
-    for possible_move in 0..move_data.1 {
-        let legal_move = move_data.0[possible_move];
-        let legal_move_parsed = ChessMove::unpack(legal_move);
-        let location_text = format!(
-            "{}{}",
-            human_readable_position(legal_move_parsed.origin),
-            human_readable_position(legal_move_parsed.destination)
-        );
-        println!(
-            "{}: {}",
-            location_text,
-            negamax(depth, board.move_piece(legal_move), tables, board.turn,)
-        );
-    }
+    println!("{}", best_move_index);
+    move_data.0[best_move_index]
 }
 
 #[cfg(test)]
