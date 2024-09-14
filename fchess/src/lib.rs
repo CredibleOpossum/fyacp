@@ -1,8 +1,10 @@
 mod chess_data;
 
+use std::{i32, u32};
+
 use chess_data::generate_data;
 
-mod data;
+pub mod data;
 use data::*;
 
 mod bitboard;
@@ -27,6 +29,7 @@ impl Default for Moves {
     }
 }
 
+#[derive(PartialEq)]
 pub enum BoardState {
     Checkmate,
     Stalemate,
@@ -204,7 +207,7 @@ impl Board {
         }
     }
 
-    fn move_piece(&self, chess_move: u16) -> Board {
+    pub fn move_piece(&self, chess_move: u16) -> Board {
         let chess_move = ChessMove::unpack(chess_move);
 
         let mut new_board = self.clone();
@@ -910,6 +913,120 @@ pub fn human_readable_position(position: u8) -> String {
     };
 
     format!("{}{}", first, second)
+}
+
+const QUEEN_VALUE: i32 = 1000;
+const ROOK_VALUE: i32 = 500;
+const BISHOP_VALUE: i32 = 350;
+const KNIGHT_VALUE: i32 = 300;
+const PAWN_VALUE: i32 = 100;
+pub fn evaluate(board: &Board) -> i32 {
+    let mut white_value = 0;
+    white_value += board.bitboards[Color::White as usize][Pieces::Queen as usize].popcnt() as i32
+        * QUEEN_VALUE;
+    white_value +=
+        board.bitboards[Color::White as usize][Pieces::Rook as usize].popcnt() as i32 * ROOK_VALUE;
+    white_value += board.bitboards[Color::White as usize][Pieces::Bishop as usize].popcnt() as i32
+        * BISHOP_VALUE;
+    white_value += board.bitboards[Color::White as usize][Pieces::Knight as usize].popcnt() as i32
+        * KNIGHT_VALUE;
+    white_value +=
+        board.bitboards[Color::White as usize][Pieces::Pawn as usize].popcnt() as i32 * PAWN_VALUE;
+
+    let mut black_value = 0;
+    black_value += board.bitboards[Color::Black as usize][Pieces::Queen as usize].popcnt() as i32
+        * QUEEN_VALUE;
+    black_value +=
+        board.bitboards[Color::Black as usize][Pieces::Rook as usize].popcnt() as i32 * ROOK_VALUE;
+    black_value += board.bitboards[Color::Black as usize][Pieces::Bishop as usize].popcnt() as i32
+        * BISHOP_VALUE;
+    black_value += board.bitboards[Color::Black as usize][Pieces::Knight as usize].popcnt() as i32
+        * KNIGHT_VALUE;
+    black_value +=
+        board.bitboards[Color::Black as usize][Pieces::Pawn as usize].popcnt() as i32 * PAWN_VALUE;
+
+    white_value - black_value
+}
+
+fn negamax(depth: usize, board: Board, tables: &ChessTables, optimizing_player: Color) -> i32 {
+    match board.get_board_state(tables) {
+        BoardState::Checkmate => {
+            return -9999;
+        }
+        BoardState::Stalemate => return 0,
+        BoardState::OnGoing => {}
+    }
+    if depth == 0 {
+        return match board.turn {
+            Color::White => evaluate(&board),
+            Color::Black => -evaluate(&board),
+        };
+    }
+
+    let move_data = board.get_all_legal_moves(tables);
+
+    let mut max = i32::MIN;
+    for possible_move in 0..move_data.1 {
+        let legal_move = move_data.0[possible_move];
+        let score = -negamax(
+            depth - 1,
+            board.move_piece(legal_move),
+            tables,
+            optimizing_player,
+        );
+        max = std::cmp::max(max, score);
+    }
+
+    max
+}
+
+pub fn get_best_move(
+    depth: usize,
+    board: Board,
+    optimizing_player: Color,
+    tables: &ChessTables,
+) -> u16 {
+    print_move_rankings(depth, board.clone(), tables);
+    let mut scores = Vec::new();
+    let move_data = board.get_all_legal_moves(tables);
+    for possible_move in 0..move_data.1 {
+        let legal_move = move_data.0[possible_move];
+        scores.push(negamax(
+            depth,
+            board.move_piece(legal_move),
+            tables,
+            optimizing_player,
+        ));
+    }
+
+    let mut min = i32::MAX;
+    let mut max_index = 0;
+    for (index, score) in scores.iter().enumerate() {
+        if *score < min {
+            min = *score;
+            max_index = index;
+        }
+    }
+
+    move_data.0[max_index]
+}
+
+pub fn print_move_rankings(depth: usize, board: Board, tables: &ChessTables) {
+    let move_data = board.get_all_legal_moves(tables);
+    for possible_move in 0..move_data.1 {
+        let legal_move = move_data.0[possible_move];
+        let legal_move_parsed = ChessMove::unpack(legal_move);
+        let location_text = format!(
+            "{}{}",
+            human_readable_position(legal_move_parsed.origin),
+            human_readable_position(legal_move_parsed.destination)
+        );
+        println!(
+            "{}: {}",
+            location_text,
+            negamax(depth, board.move_piece(legal_move), tables, board.turn,)
+        );
+    }
 }
 
 #[cfg(test)]

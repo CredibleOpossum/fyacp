@@ -4,7 +4,10 @@
 use colored::Colorize;
 use eframe::egui;
 use egui::{vec2, Color32};
-use fchess::{human_readable_position, Board, BoardState, ChessTables};
+use fchess::{
+    data::{ChessMove, Color},
+    get_best_move, human_readable_position, Board, BoardState, ChessTables,
+};
 
 static SPACING: egui::emath::Vec2 = vec2(1.0, 1.0);
 static BUTTON_SIZE: [f32; 2] = [64.0, 64.0];
@@ -56,6 +59,7 @@ impl BitBoard {
     }
 }
 
+static COMPUTER_COLOR: Color = Color::Black;
 fn main() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
@@ -65,13 +69,17 @@ fn main() -> eframe::Result {
     };
 
     let tables = ChessTables::default();
-    let mut board = Board::fen_parser("3r2k1/5ppp/8/8/8/8/5PPP/2R3K1 w - - 2 2");
+    let mut board = Board::fen_parser("1k5r/ppp5/8/8/8/8/PPP5/1K1R4 w - - 0 1");
 
     let mut previous_colormap = 0;
     let mut previous_click: Option<u64> = None;
     let mut color_mask = 0;
 
     eframe::run_simple_native("Chess", options, move |ctx, _frame| {
+        if board.get_board_state(&tables) == BoardState::OnGoing && board.turn == COMPUTER_COLOR {
+            let best_move = get_best_move(3, board.clone(), COMPUTER_COLOR, &tables);
+            board = board.move_piece(best_move);
+        }
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.style_mut().spacing.item_spacing = SPACING;
 

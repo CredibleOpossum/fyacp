@@ -36,6 +36,11 @@ impl BitBoard {
         index as u8
     }
 
+    #[inline]
+    pub fn popcnt(&self) -> u32 {
+        self.0.count_ones()
+    }
+
     fn print_internal(&self, highlighted_position: Option<u8>) {
         for bit in (0..64).rev() {
             // This is horrifying, probably should rework.
