@@ -12,4 +12,5 @@ fchess = { path = "../fchess" }
 
 [profile.release]
 strip = true
-lto = true
+lto = "fat"
+codegen-units = 1
