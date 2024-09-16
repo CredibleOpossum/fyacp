@@ -7,64 +7,16 @@ use std::{
     time::Duration,
 };
 
-use colored::Colorize;
 use eframe::egui;
 use egui::{vec2, Color32};
 use fchess::{
-    data::{ChessMove, Color},
-    get_best_move, human_readable_position, Board, BoardState, ChessTables,
+    engine::get_best_move, human_readable_position, structs::Color, Board, BoardState, ChessTables,
 };
 
 static SPACING: egui::emath::Vec2 = vec2(1.0, 1.0);
 static BUTTON_SIZE: [f32; 2] = [64.0, 64.0];
 
-#[derive(Clone, Copy)]
-pub struct BitBoard(pub u64);
-
-impl BitBoard {
-    pub fn set_bit(&mut self, bit_index: u8) {
-        self.0 |= 1 << bit_index;
-    }
-    pub fn clear_bit(&mut self, bit_index: u8) {
-        self.0 &= u64::MAX ^ (1 << bit_index);
-    }
-    pub fn get_bit(&self, bit_index: u8) -> bool {
-        self.0 & (1 << bit_index) != 0
-    }
-
-    fn print_internal(&self, highlighted_position: Option<u8>) {
-        for bit in (0..64).rev() {
-            // This is horrifying, probably should rework.
-            let should_be_highlighted = if let Some(position) = highlighted_position {
-                position == bit
-            } else {
-                false
-            };
-
-            let bit_value = self.get_bit(bit);
-            if bit_value {
-                print!("{} ", (bit_value as i32).to_string().green());
-            } else if should_be_highlighted {
-                print!("{} ", (bit_value as i32).to_string().yellow());
-            } else {
-                print!("{} ", (bit_value as i32).to_string().red());
-            }
-
-            if bit % 8 == 0 {
-                println!();
-            }
-        }
-        println!("{}", self.0);
-    }
-
-    pub fn print(&self) {
-        self.print_internal(None);
-    }
-    pub fn print_highlighting(&self, position: u8) {
-        self.print_internal(Some(position));
-    }
-}
-
+static ENGINE_DEPTH: usize = 6;
 fn ai_player(board_mutex: Arc<Mutex<Board>>) {
     let tables = &ChessTables::default();
     loop {
@@ -83,7 +35,7 @@ fn ai_player(board_mutex: Arc<Mutex<Board>>) {
         if readonly_board.get_board_state(tables) != BoardState::OnGoing {
             continue;
         }
-        let best_move = get_best_move(4, readonly_board, tables); // calculate best move while lock is not obtained,
+        let best_move = get_best_move(ENGINE_DEPTH, readonly_board, tables); // calculate best move while lock is not obtained,
 
         let mut board;
         {
@@ -95,7 +47,7 @@ fn ai_player(board_mutex: Arc<Mutex<Board>>) {
     }
 }
 
-static COMPUTER_COLOR: Color = Color::Black;
+static COMPUTER_COLOR: Color = Color::White;
 fn main() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
@@ -111,7 +63,7 @@ fn main() -> eframe::Result {
     let mut color_mask = 0;
 
     let board_mutex = Arc::new(Mutex::new(Board::fen_parser(
-        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "8/5K2/3Q4/8/8/6k1/8/8 b - - 0 1",
     )));
 
     let mut text = board_mutex.lock().unwrap().get_text_representation();
@@ -122,6 +74,7 @@ fn main() -> eframe::Result {
             ai_player(board_mutex_clone);
         });
     }
+
     eframe::run_simple_native("Chess", options, move |ctx, _frame| {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.style_mut().spacing.item_spacing = SPACING;

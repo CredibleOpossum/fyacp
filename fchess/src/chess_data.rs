@@ -2,7 +2,7 @@
 // The nice thing about bitboards is that it doesn't matter how you generate them as they are only calculated once, a lot of this is inefficient or strange
 // This should probably be some form of bootstrapping instead of generating it on launch.
 use crate::RaycastTables;
-use crate::{bitboard::BitBoard, data::*};
+use crate::{bitboard::BitBoard, constants::*, structs::*};
 
 pub fn generate_data() -> [[BitBoard; 64]; 12] {
     /*
@@ -73,11 +73,11 @@ fn generate_pawn_moves(color: Color) -> [BitBoard; 64] {
     for position in 0..64 {
         let mut movement = BitBoard(0);
 
-        let position_bitmask = 1 << position;
+        let position_bitmask = BitBoard(1 << position);
 
         let on_edge = match color {
-            Color::White => (position_bitmask & BOARD_TOP) != 0,
-            Color::Black => (position_bitmask & BOARD_BOTTOM) != 0,
+            Color::White => !(position_bitmask & BOARD_TOP).is_empty(),
+            Color::Black => !(position_bitmask & BOARD_BOTTOM).is_empty(),
         };
 
         if !on_edge {
@@ -104,12 +104,12 @@ fn generate_pawn_captures(color: Color) -> [BitBoard; 64] {
             Color::Black => -9,
         };
 
-        let position_bitmask = 1 << position;
+        let position_bitmask = BitBoard(1 << position);
 
-        let is_on_top = position_bitmask & BOARD_TOP != 0;
-        let is_on_bottom = position_bitmask & BOARD_BOTTOM != 0;
-        let is_on_left_edge = position_bitmask & BOARD_LEFT != 0;
-        let is_on_right_edge = position_bitmask & BOARD_RIGHT != 0;
+        let is_on_top = !(position_bitmask & BOARD_TOP).is_empty();
+        let is_on_bottom = !(position_bitmask & BOARD_BOTTOM).is_empty();
+        let is_on_left_edge = !(position_bitmask & BOARD_LEFT).is_empty();
+        let is_on_right_edge = !(position_bitmask & BOARD_RIGHT).is_empty();
 
         let is_vaild = match color {
             Color::White => !is_on_top,
@@ -133,12 +133,12 @@ fn generate_pawn_captures(color: Color) -> [BitBoard; 64] {
 fn generate_king_moves() -> [BitBoard; 64] {
     let mut moves = [BitBoard(0); 64];
     for position in 0..64 {
-        let bit_position = 1 << position;
+        let bit_position = BitBoard(1 << position);
 
-        let is_on_top = bit_position & BOARD_TOP != 0;
-        let is_on_bottom = bit_position & BOARD_BOTTOM != 0;
-        let is_on_left_edge = bit_position & BOARD_LEFT != 0;
-        let is_on_right_edge = bit_position & BOARD_RIGHT != 0;
+        let is_on_top = !(bit_position & BOARD_TOP).is_empty();
+        let is_on_bottom = !(bit_position & BOARD_BOTTOM).is_empty();
+        let is_on_left_edge = !(bit_position & BOARD_LEFT).is_empty();
+        let is_on_right_edge = !(bit_position & BOARD_RIGHT).is_empty();
 
         let mut movement = BitBoard(0);
         if !is_on_top && !is_on_left_edge {
@@ -174,12 +174,8 @@ fn generate_king_moves() -> [BitBoard; 64] {
     moves
 }
 
-const TOP: BitBoard = BitBoard(0xff00000000000000);
-const LEFT: BitBoard = BitBoard(0x8080808080808080);
-const RIGHT: BitBoard = BitBoard(0x101010101010101);
-const BOTTOM: BitBoard = BitBoard(0xff);
 fn generate_rook_moves_short() -> [BitBoard; 64] {
-    let tables = RaycastTables::new();
+    let tables = RaycastTables::default();
     let mut rook_moves = generate_rook_moves(&tables);
 
     for position in 0..64 {
@@ -216,7 +212,7 @@ fn generate_rook_moves(tables: &RaycastTables) -> [BitBoard; 64] {
 }
 
 fn generate_bishop_moves() -> [BitBoard; 64] {
-    let tables = RaycastTables::new();
+    let tables = RaycastTables::default();
 
     let mut bishop_moves = [BitBoard(0); 64];
 
@@ -259,7 +255,7 @@ fn generate_bishop_moves_short() -> [BitBoard; 64] {
 }
 
 fn generate_queen_moves() -> [BitBoard; 64] {
-    let tables = RaycastTables::new();
+    let tables = RaycastTables::default();
     let mut straight = generate_rook_moves(&tables);
     let diagonal = generate_bishop_moves();
     for index in 0..straight.len() {
@@ -273,17 +269,17 @@ fn generate_knight_moves() -> [BitBoard; 64] {
     let mut moves = [BitBoard(0); 64];
     for position in 0..64 {
         let mut movement = BitBoard(0);
-        let bit_position = 1 << position;
+        let bit_position = BitBoard(1 << position);
 
-        let is_on_top_thick = bit_position & THICK_BOARD_TOP != 0;
-        let is_on_bottom_thick = bit_position & THICK_BOARD_BOTTOM != 0;
-        let is_on_left_edge_thick = bit_position & THICK_BOARD_LEFT != 0;
-        let is_on_right_edge_thick = bit_position & THICK_BOARD_RIGHT != 0;
+        let is_on_top_thick = !(bit_position & THICK_BOARD_TOP).is_empty();
+        let is_on_bottom_thick = !(bit_position & THICK_BOARD_BOTTOM).is_empty();
+        let is_on_left_edge_thick = !(bit_position & THICK_BOARD_LEFT).is_empty();
+        let is_on_right_edge_thick = !(bit_position & THICK_BOARD_RIGHT).is_empty();
 
-        let is_on_top = bit_position & BOARD_TOP != 0;
-        let is_on_bottom = bit_position & BOARD_BOTTOM != 0;
-        let is_on_left_edge = bit_position & BOARD_LEFT != 0;
-        let is_on_right_edge = bit_position & BOARD_RIGHT != 0;
+        let is_on_top = !(bit_position & BOARD_TOP).is_empty();
+        let is_on_bottom = !(bit_position & BOARD_BOTTOM).is_empty();
+        let is_on_left_edge = !(bit_position & BOARD_LEFT).is_empty();
+        let is_on_right_edge = !(bit_position & BOARD_RIGHT).is_empty();
 
         if !is_on_top_thick && !is_on_left_edge {
             movement.set_bit(position + 17);

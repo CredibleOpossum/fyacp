@@ -1,18 +1,19 @@
 mod chess_data;
 
-use std::{i32, ops::IndexMut, u32};
-
 use chess_data::generate_data;
 
-pub mod data;
-use data::*;
+pub mod structs;
+use structs::*;
 
 mod bitboard;
 use bitboard::BitBoard;
 
 mod magics;
 
-const MAX_LEGAL_MOVES: usize = 195; // A resonable limit.
+mod constants;
+use constants::*;
+
+pub mod engine;
 
 #[derive(Debug)]
 struct Moves {
@@ -36,7 +37,6 @@ pub enum BoardState {
     OnGoing,
 }
 
-const EMPTY_STRING: String = String::new();
 #[derive(Clone, Copy, Debug)]
 struct CastlingRights {
     white_queenside: bool,
@@ -56,7 +56,7 @@ impl Default for CastlingRights {
 }
 
 pub struct ChessTables {
-    lookup_tables: [[BitBoard; 64]; 12],
+    lookup_tables: [[BitBoard; BOARD_SIZE]; 12],
 }
 impl Default for ChessTables {
     fn default() -> Self {
@@ -157,9 +157,9 @@ impl Board {
     }
 
     fn is_in_check(&self, tables: &ChessTables) -> bool {
-        let enemy_bitmask = self.get_full_capture_mask(self.other_color(), tables);
+        let enemy_bitmask = self.get_full_capture_mask(self.turn.opposite(), tables);
 
-        (self.find_kind_bitboard(self.turn.opposite()) & enemy_bitmask).is_empty()
+        !(self.find_kind_bitboard(self.turn) & enemy_bitmask).is_empty()
     }
 
     pub fn get_board_state(&self, tables: &ChessTables) -> BoardState {
@@ -472,7 +472,7 @@ impl Board {
             }
         }
 
-        for destination in 0..64 {
+        for destination in 0..BOARD_SIZE {
             let destination_mask = BitBoard(1 << destination);
             if (psuedolegal_capture_mask & destination_mask).is_empty() {
                 continue; // Not psuedolegal
@@ -493,7 +493,7 @@ impl Board {
             if piece == Pieces::Pawn && is_long_move {
                 move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                     origin: position,
-                    destination,
+                    destination: destination as u8,
                     move_type: MoveType::DoublePawnPush,
                 });
                 move_position += 1;
@@ -501,7 +501,7 @@ impl Board {
             }
 
             if piece == Pieces::Pawn {
-                let is_pawn_capture = (position % 8) != (destination % 8);
+                let is_pawn_capture = (position % 8) != (destination as u8 % 8);
                 if is_pawn_capture && ((BitBoard(1 << destination) & enemy_occupancy).is_empty()) {
                     continue; // This isn't a legal pawn move, since it's capturing but not hitting an enemy.
                 }
@@ -514,25 +514,25 @@ impl Board {
                 if is_moving_to_last_rank {
                     move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                         origin: position,
-                        destination,
+                        destination: destination as u8,
                         move_type: MoveType::QueenPromotion,
                     });
                     move_position += 1;
                     move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                         origin: position,
-                        destination,
+                        destination: destination as u8,
                         move_type: MoveType::RookPromotion,
                     });
                     move_position += 1;
                     move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                         origin: position,
-                        destination,
+                        destination: destination as u8,
                         move_type: MoveType::BishopPromotion,
                     });
                     move_position += 1;
                     move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                         origin: position,
-                        destination,
+                        destination: destination as u8,
                         move_type: MoveType::KnightPromotion,
                     });
                     move_position += 1;
@@ -542,7 +542,7 @@ impl Board {
 
             move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                 origin: position,
-                destination,
+                destination: destination as u8,
                 move_type: MoveType::Capture,
             });
             move_position += 1;
@@ -886,121 +886,7 @@ fn perft(board: Board, depth: u8, tables: &ChessTables) -> usize {
 }
 
 pub fn human_readable_position(position: u8) -> String {
-    let first = match position % 8 {
-        0 => 'h',
-        1 => 'g',
-        2 => 'f',
-        3 => 'e',
-        4 => 'd',
-        5 => 'c',
-        6 => 'b',
-        7 => 'a',
-
-        _ => panic!(),
-    };
-
-    let second = match position / 8 {
-        0 => '1',
-        1 => '2',
-        2 => '3',
-        3 => '4',
-        4 => '5',
-        5 => '6',
-        6 => '7',
-        7 => '8',
-
-        _ => panic!(),
-    };
-
-    format!("{}{}", first, second)
-}
-
-const QUEEN_VALUE: i32 = 1000;
-const ROOK_VALUE: i32 = 500;
-const BISHOP_VALUE: i32 = 350;
-const KNIGHT_VALUE: i32 = 300;
-const PAWN_VALUE: i32 = 100;
-pub fn evaluate(board: &Board) -> i32 {
-    let mut white_value = 0;
-    white_value += board.bitboards[Color::White as usize][Pieces::Queen as usize].popcnt() as i32
-        * QUEEN_VALUE;
-    white_value +=
-        board.bitboards[Color::White as usize][Pieces::Rook as usize].popcnt() as i32 * ROOK_VALUE;
-    white_value += board.bitboards[Color::White as usize][Pieces::Bishop as usize].popcnt() as i32
-        * BISHOP_VALUE;
-    white_value += board.bitboards[Color::White as usize][Pieces::Knight as usize].popcnt() as i32
-        * KNIGHT_VALUE;
-    white_value +=
-        board.bitboards[Color::White as usize][Pieces::Pawn as usize].popcnt() as i32 * PAWN_VALUE;
-
-    let mut black_value = 0;
-    black_value += board.bitboards[Color::Black as usize][Pieces::Queen as usize].popcnt() as i32
-        * QUEEN_VALUE;
-    black_value +=
-        board.bitboards[Color::Black as usize][Pieces::Rook as usize].popcnt() as i32 * ROOK_VALUE;
-    black_value += board.bitboards[Color::Black as usize][Pieces::Bishop as usize].popcnt() as i32
-        * BISHOP_VALUE;
-    black_value += board.bitboards[Color::Black as usize][Pieces::Knight as usize].popcnt() as i32
-        * KNIGHT_VALUE;
-    black_value +=
-        board.bitboards[Color::Black as usize][Pieces::Pawn as usize].popcnt() as i32 * PAWN_VALUE;
-
-    match board.turn {
-        Color::White => white_value - black_value,
-        Color::Black => black_value - white_value,
-    }
-}
-
-fn negamax(depth: usize, board: Board, tables: &ChessTables) -> i32 {
-    match board.get_board_state(tables) {
-        BoardState::Checkmate => return -9999,
-        BoardState::Stalemate => return 0, // Equal position
-        BoardState::OnGoing => {}
-    }
-    if depth == 0 {
-        return evaluate(&board);
-    }
-
-    let move_data = board.get_all_legal_moves(tables);
-
-    let mut max = i32::MIN;
-    for possible_move in 0..move_data.1 {
-        let legal_move = move_data.0[possible_move];
-        let score = -negamax(depth - 1, board.move_piece(legal_move), tables);
-        max = std::cmp::max(max, score);
-    }
-
-    max
-}
-
-pub fn get_best_move(depth: usize, board: Board, tables: &ChessTables) -> u16 {
-    let mut scores = Vec::new();
-    let move_data = board.get_all_legal_moves(tables);
-    for possible_move in 0..move_data.1 {
-        let legal_move = move_data.0[possible_move];
-        let new_board = board.move_piece(legal_move);
-        scores.push(-negamax(depth, new_board, tables));
-    }
-
-    let mut best_score = i32::MIN;
-    let mut best_move_index = 0;
-    for (index, score) in scores.iter().enumerate() {
-        let chess_move = ChessMove::unpack(move_data.0[index]);
-        let text = format!(
-            "{}{}",
-            human_readable_position(chess_move.origin),
-            human_readable_position(chess_move.destination)
-        );
-        println!("{}: {}", text, *score);
-        if *score > best_score {
-            println!("best move so far");
-            best_score = *score;
-            best_move_index = index;
-        }
-    }
-
-    println!("{}", best_move_index);
-    move_data.0[best_move_index]
+    HUMAN_READBLE_SQAURES[position as usize].to_string()
 }
 
 #[cfg(test)]

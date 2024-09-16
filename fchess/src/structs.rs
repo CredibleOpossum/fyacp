@@ -1,21 +1,4 @@
-use crate::bitboard::BitBoard;
-
-pub const MAX_MOVE_BUFFER: usize = 1024; // I have no idea why but smaller numbers are slower
-
-pub static UNIVERSE: u64 = u64::MAX;
-
-static BOARD_SIZE: usize = 64;
-
-pub static BOARD_TOP: u64 = 0xFF00000000000000;
-pub static BOARD_BOTTOM: u64 = 0xFF;
-pub static BOARD_LEFT: u64 = 0x8080808080808080;
-pub static BOARD_RIGHT: u64 = 0x101010101010101;
-
-// For knight moves
-pub static THICK_BOARD_TOP: u64 = 0xFFFF000000000000;
-pub static THICK_BOARD_BOTTOM: u64 = 0xFFFF;
-pub static THICK_BOARD_LEFT: u64 = 0xC0C0C0C0C0C0C0C0;
-pub static THICK_BOARD_RIGHT: u64 = 0x303030303030303;
+use crate::{bitboard::BitBoard, constants::*};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Color {
@@ -185,8 +168,8 @@ pub struct RaycastTables {
     pub south_east: [u64; 64],
 }
 
-impl RaycastTables {
-    pub fn new() -> RaycastTables {
+impl Default for RaycastTables {
+    fn default() -> RaycastTables {
         RaycastTables {
             north_west: calculate_sliding([1, 1]),
             north: calculate_sliding([0, 1]),
