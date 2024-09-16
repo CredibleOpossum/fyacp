@@ -8,7 +8,7 @@ pub const PAWN_VALUE: i32 = 100;
 
 pub const MAX_LEGAL_MOVES: usize = 32;
 
-pub const MAX_MOVE_BUFFER: usize = 128; // I have no idea why but smaller numbers are slower
+pub const MAX_MOVE_BUFFER: usize = 256;
 
 pub const _EMPTY: u64 = 0;
 pub const _UNIVERSE: u64 = u64::MAX;
