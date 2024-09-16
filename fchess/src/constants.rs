@@ -32,6 +32,8 @@ pub const BOTTOM: BitBoard = BitBoard(0xff);
 
 pub const EMPTY_STRING: String = String::new();
 
+pub const STARTING_POSITION_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
 #[rustfmt::skip]
 pub const HUMAN_READBLE_SQAURES: [&str; 64] = [ "H1", "G1", "F1", "E1", "D1", "C1", "B1", "A1",
                                                 "H2", "G2", "F2", "E2", "D2", "C2", "B2", "A2",
