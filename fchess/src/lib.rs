@@ -122,26 +122,6 @@ impl Board {
         mask
     }
 
-    /*
-    fn print_board(&self) {
-        let mut text_representation = self.get_text_representation();
-        text_representation.reverse();
-
-        println!("----------");
-        for (char_pos, char) in text_representation.iter().enumerate() {
-            if char_pos % 8 == 0 {
-                println!();
-            }
-            if *char != String::default() {
-                print!("{} ", char);
-            } else {
-                print!("  ");
-            }
-        }
-        println!("\n----------");
-    }
-    */
-
     fn get_full_capture_mask(&self, color: Color, tables: &ChessTables) -> BitBoard {
         let mut board_capturemask = BitBoard(0);
 
@@ -431,7 +411,7 @@ impl Board {
     }
 
     fn get_pseudolegal_moves(&self, position: u8, tables: &ChessTables) -> Moves {
-        let (psuedolegal_capture_mask, friendly_occupacny, enemy_occupancy) =
+        let (mut psuedolegal_capture_mask, friendly_occupacny, enemy_occupancy) =
             self.get_pseudolegal_capture_mask(position, self.turn, tables);
 
         let mut move_buffer = Moves::default();
@@ -474,11 +454,9 @@ impl Board {
             }
         }
 
-        for destination in 0..BOARD_SIZE {
-            let destination_mask = BitBoard(1 << destination);
-            if (psuedolegal_capture_mask & destination_mask).is_empty() {
-                continue; // Not psuedolegal
-            }
+        while !psuedolegal_capture_mask.is_empty() {
+            let destination = psuedolegal_capture_mask.get_index_and_pop();
+
             let (piece, color) = self.find_piece(position);
 
             let is_long_move = match color {
@@ -495,7 +473,7 @@ impl Board {
             if piece == Pieces::Pawn && is_long_move {
                 move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                     origin: position,
-                    destination: destination as u8,
+                    destination,
                     move_type: MoveType::DoublePawnPush,
                 });
                 move_position += 1;
@@ -503,7 +481,7 @@ impl Board {
             }
 
             if piece == Pieces::Pawn {
-                let is_pawn_capture = (position % 8) != (destination as u8 % 8);
+                let is_pawn_capture = (position % 8) != (destination % 8);
                 if is_pawn_capture && ((BitBoard(1 << destination) & enemy_occupancy).is_empty()) {
                     continue; // This isn't a legal pawn move, since it's capturing but not hitting an enemy.
                 }
@@ -516,25 +494,25 @@ impl Board {
                 if is_moving_to_last_rank {
                     move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                         origin: position,
-                        destination: destination as u8,
+                        destination,
                         move_type: MoveType::QueenPromotion,
                     });
                     move_position += 1;
                     move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                         origin: position,
-                        destination: destination as u8,
+                        destination,
                         move_type: MoveType::RookPromotion,
                     });
                     move_position += 1;
                     move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                         origin: position,
-                        destination: destination as u8,
+                        destination,
                         move_type: MoveType::BishopPromotion,
                     });
                     move_position += 1;
                     move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                         origin: position,
-                        destination: destination as u8,
+                        destination,
                         move_type: MoveType::KnightPromotion,
                     });
                     move_position += 1;
@@ -544,7 +522,7 @@ impl Board {
 
             move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
                 origin: position,
-                destination: destination as u8,
+                destination,
                 move_type: MoveType::Capture,
             });
             move_position += 1;
