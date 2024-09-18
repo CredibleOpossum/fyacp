@@ -13,6 +13,6 @@ Required rules to be implemented:
 Future implementation:
 * ~~Tests~~
 * ~~[Perft](https://www.chessprogramming.org/Perft)~~
-* [Minimax evaluation algorithm](https://www.chessprogramming.org/Minimax)
+* ~~[Minimax evaluation algorithm](https://www.chessprogramming.org/Minimax)~~
 * ~~[Magic bitboards](https://www.chessprogramming.org/Magic_Bitboards)~~
-* [UCI](https://www.chessprogramming.org/UCI)
+* ~~[UCI](https://www.chessprogramming.org/UCI)~~

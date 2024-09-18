@@ -7,7 +7,7 @@ use chess_data::generate_data;
 pub mod structs;
 use structs::*;
 
-mod bitboard;
+pub mod bitboard;
 use bitboard::BitBoard;
 
 mod magics;
@@ -609,15 +609,37 @@ impl Board {
         move_buffer
     }
 
-    pub fn try_make_move(&mut self, position: u8, destination: u8, tables: &ChessTables) {
+    pub fn try_make_move(
+        &mut self,
+        position: u8,
+        destination: u8,
+        promotion_preference: char,
+        tables: &ChessTables,
+    ) {
         let legal_moves = self.get_all_legal_moves(tables);
         for possible_move in 0..legal_moves.1 {
             let parsed_move = ChessMove::unpack(legal_moves.0[possible_move]);
             match parsed_move.move_type {
-                MoveType::QueenPromotion => {}
-                MoveType::RookPromotion => continue,
-                MoveType::BishopPromotion => continue,
-                MoveType::KnightPromotion => continue,
+                MoveType::QueenPromotion => {
+                    if promotion_preference != 'q' {
+                        continue;
+                    }
+                }
+                MoveType::RookPromotion => {
+                    if promotion_preference != 'r' {
+                        continue;
+                    }
+                }
+                MoveType::BishopPromotion => {
+                    if promotion_preference != 'b' {
+                        continue;
+                    }
+                }
+                MoveType::KnightPromotion => {
+                    if promotion_preference != 'k' {
+                        continue;
+                    }
+                }
 
                 _ => {}
             }
@@ -709,7 +731,7 @@ impl Board {
         text_representation
     }
 
-    fn get_all_legal_moves(&self, tables: &ChessTables) -> ([u16; MAX_MOVE_BUFFER], usize) {
+    pub fn get_all_legal_moves(&self, tables: &ChessTables) -> ([u16; MAX_MOVE_BUFFER], usize) {
         let mut move_buffer = [0; MAX_MOVE_BUFFER];
         let mut array_position: usize = 0;
 

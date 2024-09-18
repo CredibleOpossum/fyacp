@@ -4,7 +4,7 @@ use colored::Colorize;
 
 pub static UNIVERSE: u64 = u64::MAX;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub struct BitBoard(pub u64);
 
 impl BitBoard {

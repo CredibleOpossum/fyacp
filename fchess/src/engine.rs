@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+use std::hash::Hash;
+
+use crate::bitboard::BitBoard;
 use crate::constants::*;
 use crate::human_readable_position;
 use crate::Board;
@@ -7,10 +11,16 @@ use crate::ChessTables;
 use crate::Color;
 use crate::Pieces;
 
-fn negamax(depth: usize, max_depth: usize, board: Board, tables: &ChessTables) -> i32 {
+fn negamax(
+    depth: usize,
+    max_depth: usize,
+    board: Board,
+    mut move_history: HashMap<[[BitBoard; 6]; 2], u8>,
+    tables: &ChessTables,
+) -> i32 {
     match board.get_board_state(tables) {
-        BoardState::Checkmate => return -9999 + (depth as i32), // Score checkmates at a higher depth lower, meaning the engine will choose the fastest checkmate.
-        BoardState::Stalemate => return 0,                      // Equal position
+        BoardState::Checkmate => return -999_999 + (depth as i32), // Score checkmates at a higher depth lower, meaning the engine will choose the fastest checkmate (or slowest if negative solve).
+        BoardState::Stalemate => return 0,                         // Equal position
         BoardState::OnGoing => {}
     }
     if depth == max_depth {
@@ -22,20 +32,31 @@ fn negamax(depth: usize, max_depth: usize, board: Board, tables: &ChessTables) -
     let mut max = i32::MIN;
     for possible_move in 0..move_data.1 {
         let legal_move = move_data.0[possible_move];
-        let score = -negamax(depth + 1, max_depth, board.move_piece(legal_move), tables);
+        let score = -negamax(
+            depth + 1,
+            max_depth,
+            board.move_piece(legal_move),
+            move_history.clone(),
+            tables,
+        );
         max = std::cmp::max(max, score);
     }
 
     max
 }
 
-pub fn get_best_move(depth: usize, board: Board, tables: &ChessTables) -> u16 {
+pub fn get_best_move(
+    depth: usize,
+    board: Board,
+    move_history: HashMap<[[BitBoard; 6]; 2], u8>,
+    tables: &ChessTables,
+) -> u16 {
     let mut scores = Vec::new();
     let move_data = board.get_all_legal_moves(tables);
     for possible_move in 0..move_data.1 {
         let legal_move = move_data.0[possible_move];
         let new_board = board.move_piece(legal_move);
-        scores.push(-negamax(0, depth, new_board, tables));
+        scores.push(-negamax(0, depth, new_board, move_history.clone(), tables));
     }
 
     let mut best_score = i32::MIN;
