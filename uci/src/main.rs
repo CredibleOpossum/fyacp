@@ -58,11 +58,11 @@ fn parse_command(command: &str) -> (u8, u8) {
 }
 
 fn main() {
-    //let mut uci = Uci(Some(
-    //    TcpStream::connect(OUTPUT_ADDR).expect("Failed to connect to output server"),
-    //));
+    let mut uci = Uci(Some(
+        TcpStream::connect(OUTPUT_ADDR).expect("Failed to connect to output server"),
+    ));
 
-    let mut uci = Uci(None);
+    //let mut uci = Uci(None);
 
     uci.debug("START");
 
@@ -111,36 +111,43 @@ fn main() {
                 _ => {}
             },
             "position" => {
+                let moves_index = command_split.iter().position(|&r| r == "moves");
                 match command_split[1] {
                     "startpos" => {
                         board = Board::default();
-                        let moves_index = command_split.iter().position(|&r| r == "moves");
-                        let mut move_history = HashMap::new();
-                        if let Some(index) = moves_index {
-                            for chess_move in &command_split[index + 1..] {
-                                let possible_seen_count = move_history.get(&board.bitboards);
-                                match possible_seen_count {
-                                    Some(value) => move_history.insert(board.bitboards, value + 1),
-                                    None => move_history.insert(board.bitboards, 1),
-                                };
-                                let move_data = parse_command(chess_move);
-
-                                let mut promotion_preference = 'q';
-                                if chess_move.len() == 5 {
-                                    promotion_preference = chess_move.chars().nth(4).unwrap();
-                                }
-                                board.try_make_move(
-                                    move_data.0,
-                                    move_data.1,
-                                    promotion_preference,
-                                    &tables,
-                                );
-                            }
-                        }
                     }
-                    "fen" => board = Board::fen_parser(&command_split[2..].join(" ")),
+                    "fen" => {
+                        let fen = match moves_index {
+                            Some(value) => &command_split[2..value],
+                            None => &command_split[2..],
+                        };
+                        board = Board::fen_parser(&fen.join(" "));
+                    }
                     _ => panic!(),
                 };
+
+                let mut move_history = HashMap::new();
+                if let Some(index) = moves_index {
+                    for chess_move in &command_split[index + 1..] {
+                        let possible_seen_count = move_history.get(&board.bitboards);
+                        match possible_seen_count {
+                            Some(value) => move_history.insert(board.bitboards, value + 1),
+                            None => move_history.insert(board.bitboards, 1),
+                        };
+                        let move_data = parse_command(chess_move);
+
+                        let mut promotion_preference = 'q';
+                        if chess_move.len() == 5 {
+                            promotion_preference = chess_move.chars().nth(4).unwrap();
+                        }
+                        board.try_make_move(
+                            move_data.0,
+                            move_data.1,
+                            promotion_preference,
+                            &tables,
+                        );
+                    }
+                }
             }
 
             _ => {}
