@@ -1,77 +1,8 @@
 #[cfg(test)]
-use crate::human_readable_position;
-#[cfg(test)]
-use crate::Board;
-#[cfg(test)]
-use crate::BoardState;
-#[cfg(test)]
-use crate::ChessMove;
-#[cfg(test)]
-use crate::ChessTables;
-
-#[cfg(test)]
-fn perft_internal(board: Board, depth: u8, max_depth: u8, tables: &ChessTables) -> usize {
-    let all_legal_moves = board.get_all_legal_moves(tables);
-    if depth == max_depth {
-        return all_legal_moves.1;
-    }
-
-    match board.get_board_state(tables) {
-        BoardState::Checkmate => return all_legal_moves.1,
-        BoardState::Stalemate => return all_legal_moves.1,
-        BoardState::OnGoing => {}
-    }
-
-    let mut move_sum = 0;
-
-    for possible_move in 0..all_legal_moves.1 {
-        let postmove = board.move_piece(all_legal_moves.0[possible_move]);
-        move_sum += perft_internal(postmove, depth + 1, max_depth, tables);
-    }
-
-    move_sum
-}
-
-#[cfg(test)]
-fn perft(board: Board, depth: u8, tables: &ChessTables) -> usize {
-    let mut results = Vec::new();
-
-    let mut sum = 0;
-    let legal_moves = board.get_all_legal_moves(tables);
-
-    for possible_move in 0..legal_moves.1 {
-        let move_count = if depth == 1 {
-            1
-        } else {
-            perft_internal(
-                board.move_piece(legal_moves.0[possible_move]),
-                1,
-                depth - 1,
-                tables,
-            )
-        };
-        sum += move_count;
-        let parsed = ChessMove::unpack(legal_moves.0[possible_move]);
-
-        results.push(format!(
-            "{}{}: {}",
-            human_readable_position(parsed.origin),
-            human_readable_position(parsed.destination),
-            move_count
-        ))
-    }
-
-    results.sort();
-    for result in results {
-        println!("{}", result);
-    }
-
-    sum
-}
-
-#[cfg(test)]
 mod tests {
-    use crate::{Board, ChessTables, STARTING_POSITION_FEN};
+    use crate::{
+        human_readable_position, perft, Board, BoardState, ChessTables, STARTING_POSITION_FEN,
+    };
 
     use super::*;
     // https://www.chessprogramming.org/Perft_Results

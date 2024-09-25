@@ -825,3 +825,54 @@ impl Board {
 pub fn human_readable_position(position: u8) -> String {
     HUMAN_READBLE_SQAURES[position as usize].to_string()
 }
+
+fn perft_internal(board: Board, depth: u8, max_depth: u8, tables: &ChessTables) -> usize {
+    let all_legal_moves = board.get_all_legal_moves(tables);
+    if depth == max_depth {
+        return all_legal_moves.1;
+    }
+
+    match board.get_board_state(tables) {
+        BoardState::Checkmate => return all_legal_moves.1,
+        BoardState::Stalemate => return all_legal_moves.1,
+        BoardState::OnGoing => {}
+    }
+
+    let mut move_sum = 0;
+
+    for possible_move in 0..all_legal_moves.1 {
+        let postmove = board.move_piece(all_legal_moves.0[possible_move]);
+        move_sum += perft_internal(postmove, depth + 1, max_depth, tables);
+    }
+
+    move_sum
+}
+
+pub fn perft(board: Board, depth: u8, tables: &ChessTables) -> usize {
+    let mut sum = 0;
+    let legal_moves = board.get_all_legal_moves(tables);
+
+    for possible_move in 0..legal_moves.1 {
+        let move_count = if depth == 1 {
+            1
+        } else {
+            perft_internal(
+                board.move_piece(legal_moves.0[possible_move]),
+                1,
+                depth - 1,
+                tables,
+            )
+        };
+        sum += move_count;
+        let parsed = ChessMove::unpack(legal_moves.0[possible_move]);
+
+        println!(
+            "{}{}: {}",
+            human_readable_position(parsed.origin).to_lowercase(),
+            human_readable_position(parsed.destination).to_lowercase(),
+            move_count
+        );
+    }
+
+    sum
+}

@@ -3,8 +3,8 @@ use std::{io::Write, net::TcpStream};
 
 use fchess::engine::get_best_move;
 use fchess::structs::ChessMove;
-use fchess::ChessTables;
 use fchess::{human_readable_position, Board};
+use fchess::{perft, ChessTables};
 use text_io::read;
 
 const OUTPUT_ADDR: &str = "127.0.0.1:2024";
@@ -58,17 +58,17 @@ fn parse_command(command: &str) -> (u8, u8) {
 }
 
 fn main() {
-    let mut uci = Uci(Some(
-        TcpStream::connect(OUTPUT_ADDR).expect("Failed to connect to output server"),
-    ));
+    //let mut uci = Uci(Some(
+    //    TcpStream::connect(OUTPUT_ADDR).expect("Failed to connect to output server"),
+    //));
 
-    //let mut uci = Uci(None);
+    let mut uci = Uci(None);
 
     uci.debug("START");
 
     let tables = ChessTables::default();
+    let mut board = Board::default();
     loop {
-        let mut board = Board::default();
         let command = uci.get();
         let command_split = command.split(" ").collect::<Vec<&str>>();
         match command_split[0] {
@@ -80,51 +80,67 @@ fn main() {
             "isready" => uci.put("readyok"),
             "quit" => break,
             "ucinewgame" => {}
-            "go" => {}
+
+            "go" => match command_split[1] {
+                "perft" => {
+                    let depth: u8 = command_split[2]
+                        .parse()
+                        .expect("depth provided wasn't a vaild usize");
+                    let results = perft(board.clone(), depth, &tables);
+
+                    let result_string = format!("Nodes searched: {}", results);
+                    uci.put(&result_string);
+                }
+                "wtime" => {
+                    let chess_move =
+                        ChessMove::unpack(get_best_move(3, board.clone(), HashMap::new(), &tables));
+                    let suffix = match chess_move.move_type {
+                        fchess::structs::MoveType::QueenPromotion => "q",
+                        fchess::structs::MoveType::RookPromotion => "r",
+                        fchess::structs::MoveType::BishopPromotion => "b",
+                        fchess::structs::MoveType::KnightPromotion => "k",
+                        _ => "",
+                    };
+                    uci.put(&format!(
+                        "bestmove {}{}{}",
+                        human_readable_position(chess_move.origin).to_lowercase(),
+                        human_readable_position(chess_move.destination).to_lowercase(),
+                        suffix
+                    ));
+                }
+                _ => {}
+            },
             "position" => {
                 match command_split[1] {
-                    "startpos" => {}
+                    "startpos" => {
+                        board = Board::default();
+                        let moves_index = command_split.iter().position(|&r| r == "moves");
+                        let mut move_history = HashMap::new();
+                        if let Some(index) = moves_index {
+                            for chess_move in &command_split[index + 1..] {
+                                let possible_seen_count = move_history.get(&board.bitboards);
+                                match possible_seen_count {
+                                    Some(value) => move_history.insert(board.bitboards, value + 1),
+                                    None => move_history.insert(board.bitboards, 1),
+                                };
+                                let move_data = parse_command(chess_move);
+
+                                let mut promotion_preference = 'q';
+                                if chess_move.len() == 5 {
+                                    promotion_preference = chess_move.chars().nth(4).unwrap();
+                                }
+                                board.try_make_move(
+                                    move_data.0,
+                                    move_data.1,
+                                    promotion_preference,
+                                    &tables,
+                                );
+                            }
+                        }
+                    }
                     "fen" => board = Board::fen_parser(&command_split[2..].join(" ")),
                     _ => panic!(),
                 };
-                let moves_index = command_split.iter().position(|&r| r == "moves");
-                let mut move_history = HashMap::new();
-                if let Some(index) = moves_index {
-                    for chess_move in &command_split[index + 1..] {
-                        let possible_seen_count = move_history.get(&board.bitboards);
-                        match possible_seen_count {
-                            Some(value) => move_history.insert(board.bitboards, value + 1),
-                            None => move_history.insert(board.bitboards, 1),
-                        };
-                        let move_data = parse_command(chess_move);
-
-                        let mut promotion_preference = 'q';
-                        if chess_move.len() == 5 {
-                            promotion_preference = chess_move.chars().nth(4).unwrap();
-                        }
-                        board.try_make_move(
-                            move_data.0,
-                            move_data.1,
-                            promotion_preference,
-                            &tables,
-                        );
-                    }
-                }
-                let chess_move =
-                    ChessMove::unpack(get_best_move(3, board.clone(), move_history, &tables));
-                let suffix = match chess_move.move_type {
-                    fchess::structs::MoveType::QueenPromotion => "q",
-                    fchess::structs::MoveType::RookPromotion => "r",
-                    fchess::structs::MoveType::BishopPromotion => "b",
-                    fchess::structs::MoveType::KnightPromotion => "k",
-                    _ => "",
-                };
-                uci.put(&format!(
-                    "bestmove {}{}{}",
-                    human_readable_position(chess_move.origin).to_lowercase(),
-                    human_readable_position(chess_move.destination).to_lowercase(),
-                    suffix
-                ));
             }
 
             _ => {}
