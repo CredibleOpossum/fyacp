@@ -12,7 +12,7 @@ const OUTPUT_ADDR: &str = "127.0.0.1:2024";
 struct Uci(Option<TcpStream>);
 impl Uci {
     fn put(&mut self, text: &str) {
-        let debug_message = format!("[ENGINE -> UCI] {}\n", text);
+        let debug_message = format!("[ENGINE -> GUI] {}\n", text);
         if let Some(stream) = &mut self.0 {
             stream.write_all(debug_message.as_bytes()).unwrap();
         }
@@ -20,7 +20,7 @@ impl Uci {
     }
     fn get(&mut self) -> String {
         let text: String = read!("{}\n");
-        let debug_message = format!("[UCI -> ENGINE] {}\n", text);
+        let debug_message = format!("[GUI -> ENGINE] {}\n", text);
         if let Some(stream) = &mut self.0 {
             stream.write_all(debug_message.as_bytes()).unwrap();
         }
@@ -57,17 +57,23 @@ fn parse_command(command: &str) -> (u8, u8) {
     (position_first_int as u8, position_second_int as u8)
 }
 
+static DEBUGGING: bool = false;
 fn main() {
-    let mut uci = Uci(Some(
-        TcpStream::connect(OUTPUT_ADDR).expect("Failed to connect to output server"),
-    ));
-
-    //let mut uci = Uci(None);
+    let mut uci = if DEBUGGING {
+        Uci(Some(
+            TcpStream::connect(OUTPUT_ADDR).expect("Failed to connect to output server"),
+        ))
+    } else {
+        Uci(None)
+    };
 
     uci.debug("START");
 
     let tables = ChessTables::default();
+
     let mut board = Board::default();
+    let mut board_history = HashMap::new();
+
     loop {
         let command = uci.get();
         let command_split = command.split(" ").collect::<Vec<&str>>();
@@ -92,8 +98,12 @@ fn main() {
                     uci.put(&result_string);
                 }
                 "wtime" => {
-                    let chess_move =
-                        ChessMove::unpack(get_best_move(3, board.clone(), HashMap::new(), &tables));
+                    let chess_move = ChessMove::unpack(get_best_move(
+                        3,
+                        board.clone(),
+                        board_history.clone(),
+                        &tables,
+                    ));
                     let suffix = match chess_move.move_type {
                         fchess::structs::MoveType::QueenPromotion => "q",
                         fchess::structs::MoveType::RookPromotion => "r",
@@ -101,6 +111,9 @@ fn main() {
                         fchess::structs::MoveType::KnightPromotion => "k",
                         _ => "",
                     };
+                    for key in board_history.values() {
+                        uci.debug(&key.to_string());
+                    }
                     uci.put(&format!(
                         "bestmove {}{}{}",
                         human_readable_position(chess_move.origin).to_lowercase(),
@@ -126,13 +139,14 @@ fn main() {
                     _ => panic!(),
                 };
 
-                let mut move_history = HashMap::new();
+                board_history = HashMap::new();
+                board_history.insert(board.bitboards, 1);
                 if let Some(index) = moves_index {
                     for chess_move in &command_split[index + 1..] {
-                        let possible_seen_count = move_history.get(&board.bitboards);
+                        let possible_seen_count = board_history.get(&board.bitboards);
                         match possible_seen_count {
-                            Some(value) => move_history.insert(board.bitboards, value + 1),
-                            None => move_history.insert(board.bitboards, 1),
+                            Some(value) => board_history.insert(board.bitboards, value + 1),
+                            None => board_history.insert(board.bitboards, 1),
                         };
                         let move_data = parse_command(chess_move);
 

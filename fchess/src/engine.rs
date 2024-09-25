@@ -19,9 +19,15 @@ fn negamax(
     tables: &ChessTables,
 ) -> i32 {
     match board.get_board_state(tables) {
-        BoardState::Checkmate => return -999_999 + (depth as i32), // Score checkmates at a higher depth lower, meaning the engine will choose the fastest checkmate (or slowest if negative solve).
+        BoardState::Checkmate => return -999_999 + (depth as i32), // Score checkmates at a higher depth lower, meaning the engine will choose the fastest checkmate (or slowest if negative score).
         BoardState::Stalemate => return 0,                         // Equal position
         BoardState::OnGoing => {}
+    }
+    if let Some(value) = move_history.get(&board.bitboards) {
+        if *value == 2 {
+            // We've seen it twice in the history, I'm also seeing it now, so it's three.
+            return 0; // Threefold
+        }
     }
     if depth == max_depth {
         return evaluate(&board);
@@ -32,10 +38,16 @@ fn negamax(
     let mut max = i32::MIN;
     for possible_move in 0..move_data.1 {
         let legal_move = move_data.0[possible_move];
+        let new_board = board.move_piece(legal_move);
+        let possible_seen_count = move_history.get(&new_board.bitboards);
+        match possible_seen_count {
+            Some(value) => move_history.insert(board.bitboards, value + 1),
+            None => move_history.insert(board.bitboards, 1),
+        };
         let score = -negamax(
             depth + 1,
             max_depth,
-            board.move_piece(legal_move),
+            new_board,
             move_history.clone(),
             tables,
         );
