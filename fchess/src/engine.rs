@@ -138,16 +138,12 @@ pub fn evaluate(board: &Board, tables: &ChessTables) -> i32 {
     black_value +=
         board.bitboards[Color::Black as usize][Pieces::Pawn as usize].popcnt() as i32 * PAWN_VALUE;
 
+    let white_mobility_value =
+        board.get_full_capture_mask(Color::White, tables).popcnt() as i32 * MOBILITY_VALUE;
+    let black_mobility_value =
+        board.get_full_capture_mask(Color::Black, tables).popcnt() as i32 * MOBILITY_VALUE;
     match board.turn {
-        Color::White => {
-            (white_value - black_value)
-                + (board.get_full_capture_mask(Color::White, tables).popcnt() as i32
-                    * MOBILITY_VALUE)
-        }
-        Color::Black => {
-            (black_value - white_value)
-                + (board.get_full_capture_mask(Color::Black, tables).popcnt() as i32
-                    * MOBILITY_VALUE)
-        }
+        Color::White => white_value - black_value + white_mobility_value - black_mobility_value,
+        Color::Black => black_value - white_value + black_mobility_value - black_mobility_value,
     }
 }

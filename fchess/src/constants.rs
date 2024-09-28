@@ -6,7 +6,7 @@ pub const ROOK_VALUE: i32 = 500;
 pub const BISHOP_VALUE: i32 = 350;
 pub const KNIGHT_VALUE: i32 = 300;
 pub const PAWN_VALUE: i32 = 100;
-pub const MOBILITY_VALUE: i32 = 2; // PLACEHOLDER
+pub const MOBILITY_VALUE: i32 = 1; // PLACEHOLDER
 
 pub const MAX_LEGAL_MOVES: usize = 32;
 

@@ -117,7 +117,8 @@ impl Board {
         new_board.bitboards[color_index][piece_type as usize].clear_bit(chess_move.origin);
 
         match chess_move.move_type {
-            MoveType::QuietMove => todo!(),
+            MoveType::QuietMove => new_board.bitboards[color_index][piece_type as usize]
+                .set_bit(chess_move.destination),
             MoveType::DoublePawnPush => {
                 new_board.bitboards[color_index][piece_type as usize]
                     .set_bit(chess_move.destination);
@@ -439,11 +440,23 @@ impl Board {
                 }
             }
 
-            move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
-                origin: position,
-                destination,
-                move_type: MoveType::Capture,
-            });
+            match !(BitBoard(1 << destination) & enemy_occupancy).is_empty() {
+                true => {
+                    move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
+                        origin: position,
+                        destination,
+                        move_type: MoveType::Capture,
+                    });
+                }
+                false => {
+                    move_buffer.move_buffer[move_position] = ChessMove::pack(&ChessMove {
+                        origin: position,
+                        destination,
+                        move_type: MoveType::QuietMove,
+                    });
+                }
+            }
+
             move_position += 1;
         }
 
