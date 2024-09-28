@@ -1,8 +1,8 @@
 #![allow(clippy::needless_range_loop)]
 // The nice thing about bitboards is that it doesn't matter how you generate them as they are only calculated once, a lot of this is inefficient or strange
 // This should probably be some form of bootstrapping instead of generating it on launch.
-use crate::RaycastTables;
 use crate::{bitboard::BitBoard, constants::*, structs::*};
+use crate::{Board, RaycastTables};
 
 pub fn generate_data() -> [[BitBoard; 64]; 12] {
     /*
@@ -316,4 +316,83 @@ fn generate_knight_moves() -> [BitBoard; 64] {
         moves[position as usize] = movement;
     }
     moves
+}
+
+pub fn fen_parser(fen: &str) -> Board {
+    // Doesn't parse en_passant square.
+    let mut board = Board::default();
+
+    let mut index: usize = 0;
+    let split_fen: Vec<&str> = fen.split(' ').collect();
+
+    for bitboard in 0..board.bitboards.len() {
+        board.bitboards[bitboard] = [BitBoard(0); 6];
+    }
+
+    for character in split_fen[0].chars().rev() {
+        if !split_fen[2].contains('Q') {
+            board.castling_rights.white_queenside = false;
+        }
+        if !split_fen[2].contains('K') {
+            board.castling_rights.white_kingside = false;
+        }
+        if !split_fen[2].contains('q') {
+            board.castling_rights.black_queenside = false;
+        }
+        if !split_fen[2].contains('k') {
+            board.castling_rights.black_kingside = false;
+        }
+
+        match character {
+            'P' => board.bitboards[0][Pieces::Pawn as usize].0 |= 1 << index,
+            'p' => board.bitboards[1][Pieces::Pawn as usize].0 |= 1 << index,
+
+            'N' => board.bitboards[0][Pieces::Knight as usize].0 |= 1 << index,
+            'n' => board.bitboards[1][Pieces::Knight as usize].0 |= 1 << index,
+
+            'B' => board.bitboards[0][Pieces::Bishop as usize].0 |= 1 << index,
+            'b' => board.bitboards[1][Pieces::Bishop as usize].0 |= 1 << index,
+
+            'R' => board.bitboards[0][Pieces::Rook as usize].0 |= 1 << index,
+            'r' => board.bitboards[1][Pieces::Rook as usize].0 |= 1 << index,
+
+            'Q' => board.bitboards[0][Pieces::Queen as usize].0 |= 1 << index,
+            'q' => board.bitboards[1][Pieces::Queen as usize].0 |= 1 << index,
+
+            'K' => board.bitboards[0][Pieces::King as usize].0 |= 1 << index,
+            'k' => board.bitboards[1][Pieces::King as usize].0 |= 1 << index,
+
+            '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' => {
+                index += character.to_string().parse::<i32>().unwrap() as usize;
+                continue;
+            }
+            _ => {
+                continue;
+            }
+        }
+
+        index += 1;
+        if index >= 64 {
+            break;
+        }
+    }
+
+    let en_passant_square_string = split_fen[3];
+    if en_passant_square_string != "-" {
+        let board_square_index = HUMAN_READBLE_SQAURES
+            .iter()
+            .position(|&r| r == en_passant_square_string.to_uppercase())
+            .expect("En passant square wasn't vaild.") as u8;
+        board.en_passant = Some(board_square_index)
+    }
+
+    let turn = match split_fen[1] {
+        "w" => Color::White,
+        "b" => Color::Black,
+        _ => panic!("Invaild fen, incorrect turn?"),
+    };
+
+    board.turn = turn;
+
+    board
 }

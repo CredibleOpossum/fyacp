@@ -1,9 +1,8 @@
 use std::collections::HashMap;
-use std::hash::Hash;
 
 use crate::bitboard::BitBoard;
 use crate::constants::*;
-use crate::human_readable_position;
+use crate::move_generation::human_readable_position;
 use crate::Board;
 use crate::BoardState;
 use crate::ChessMove;

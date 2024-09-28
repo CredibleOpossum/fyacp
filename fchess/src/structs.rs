@@ -1,4 +1,4 @@
-use crate::{bitboard::BitBoard, constants::*};
+use crate::{bitboard::BitBoard, chess_data::generate_data, constants::*};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Color {
@@ -199,4 +199,75 @@ pub enum LookupTable {
     WhitePawnLongMoves,
     BlackPawnLongMoves,
     Blank,
+}
+
+#[derive(Debug)]
+pub struct Moves {
+    pub move_buffer: [u16; MAX_LEGAL_MOVES],
+    pub move_length: u8,
+}
+
+impl Default for Moves {
+    fn default() -> Moves {
+        Moves {
+            move_buffer: [0u16; MAX_LEGAL_MOVES],
+            move_length: 0,
+        }
+    }
+}
+
+#[derive(PartialEq)]
+pub enum BoardState {
+    Checkmate,
+    Stalemate,
+    OnGoing,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct CastlingRights {
+    pub white_queenside: bool,
+    pub white_kingside: bool,
+    pub black_queenside: bool,
+    pub black_kingside: bool,
+}
+impl Default for CastlingRights {
+    fn default() -> Self {
+        CastlingRights {
+            // Maybe replace this with a 2 bit u8 bitmask.
+            white_queenside: true,
+            white_kingside: true,
+            black_queenside: true,
+            black_kingside: true,
+        }
+    }
+}
+
+pub struct ChessTables {
+    pub lookup_tables: [[BitBoard; BOARD_SIZE]; 12],
+}
+impl Default for ChessTables {
+    fn default() -> Self {
+        ChessTables {
+            lookup_tables: generate_data(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Board {
+    pub bitboards: [[BitBoard; 6]; 2],
+    pub castling_rights: CastlingRights,
+    pub en_passant: Option<u8>, // Denotes the position of where the en passant square can be captured
+    pub turn: Color,
+}
+
+impl Default for Board {
+    fn default() -> Self {
+        Board {
+            bitboards: STARTING_POSITION,
+            castling_rights: CastlingRights::default(),
+            en_passant: None,
+            turn: Color::White,
+        }
+    }
 }

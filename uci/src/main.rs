@@ -2,9 +2,8 @@ use std::collections::HashMap;
 use std::{io::Write, net::TcpStream};
 
 use fchess::engine::get_best_move;
-use fchess::structs::ChessMove;
-use fchess::{human_readable_position, Board};
-use fchess::{perft, ChessTables};
+use fchess::move_generation::*;
+use fchess::structs::{Board, ChessMove, ChessTables};
 use text_io::read;
 
 const OUTPUT_ADDR: &str = "127.0.0.1:2024";
@@ -99,7 +98,7 @@ fn main() {
                 }
                 "wtime" => {
                     let chess_move = ChessMove::unpack(get_best_move(
-                        5,
+                        4,
                         board.clone(),
                         board_history.clone(),
                         &tables,
@@ -111,9 +110,9 @@ fn main() {
                         fchess::structs::MoveType::KnightPromotion => "k",
                         _ => "",
                     };
-                    for key in board_history.values() {
-                        uci.debug(&key.to_string());
-                    }
+                    //for key in board_history.values() {
+                    //    uci.debug(&key.to_string());
+                    //}
                     uci.put(&format!(
                         "bestmove {}{}{}",
                         human_readable_position(chess_move.origin).to_lowercase(),
@@ -134,7 +133,9 @@ fn main() {
                             Some(value) => &command_split[2..value],
                             None => &command_split[2..],
                         };
-                        board = Board::fen_parser(&fen.join(" "));
+
+                        board = fchess::chess_data::fen_parser(&fen.join(" "));
+                        uci.debug(&format!("{:?}", board.en_passant));
                     }
                     _ => panic!(),
                 };
