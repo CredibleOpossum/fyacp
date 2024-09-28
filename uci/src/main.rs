@@ -41,6 +41,7 @@ const HUMAN_READBLE_SQAURES: [&str; 64] = [
     "H5", "G5", "F5", "E5", "D5", "C5", "B5", "A5", "H6", "G6", "F6", "E6", "D6", "C6", "B6", "A6",
     "H7", "G7", "F7", "E7", "D7", "C7", "B7", "A7", "H8", "G8", "F8", "E8", "D8", "C8", "B8", "A8",
 ];
+
 fn parse_command(command: &str) -> (u8, u8) {
     let position_first = &command[0..2].to_uppercase();
     let position_second = &command[2..4].to_uppercase();

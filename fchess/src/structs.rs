@@ -14,7 +14,7 @@ impl Color {
         }
     }
 }
-//
+
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum MoveType {
     QuietMove,

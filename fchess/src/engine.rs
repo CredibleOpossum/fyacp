@@ -146,7 +146,7 @@ pub fn evaluate(board: &Board, tables: &ChessTables) -> i32 {
         }
         Color::Black => {
             (black_value - white_value)
-                + (board.get_full_capture_mask(Color::White, tables).popcnt() as i32
+                + (board.get_full_capture_mask(Color::Black, tables).popcnt() as i32
                     * MOBILITY_VALUE)
         }
     }
