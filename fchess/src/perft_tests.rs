@@ -60,7 +60,7 @@ mod tests {
     #[test]
     fn perft_promotion_pinned() {
         let tables = ChessTables::default();
-        let board = fen_parser("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8  ");
+        let board = fen_parser("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8");
         let move_count = perft(board, 4, &tables);
         assert_eq!(move_count, 2_103_487);
     }

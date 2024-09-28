@@ -17,16 +17,33 @@ impl Color {
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum MoveType {
+    KnightPromotion, // Sorted by how likely they are to be good moves (asc). Not calculated, just guessing.
+    BishopPromotion,
+    RookPromotion,
     QuietMove,
     DoublePawnPush,
-    KingCastle,
     QueenCastle,
+    KingCastle,
     Capture,
     EnPassant,
     QueenPromotion,
-    RookPromotion,
-    BishopPromotion,
-    KnightPromotion,
+}
+impl MoveType {
+    fn from_u8(index: u8) -> MoveType {
+        match index {
+            0 => MoveType::KnightPromotion,
+            1 => MoveType::BishopPromotion,
+            2 => MoveType::RookPromotion,
+            3 => MoveType::QuietMove,
+            4 => MoveType::DoublePawnPush,
+            5 => MoveType::QueenCastle,
+            6 => MoveType::KingCastle,
+            7 => MoveType::Capture,
+            8 => MoveType::EnPassant,
+            9 => MoveType::QueenPromotion,
+            _ => panic!(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -37,36 +54,23 @@ pub struct ChessMove {
 }
 impl ChessMove {
     pub fn pack(&self) -> u16 {
-        let position: u16 = (self.origin as u16 & 0b111111) << 10; // 6 bits
-        let destination: u16 = (self.destination as u16 & 0b111111) << 4; // 6 bits
-        let move_type: u16 = self.move_type as u16 & 0b1111; // 4 bits
+        let move_type: u16 = (self.move_type as u16 & 0b1111) << 12; // 4 bits
+        let position: u16 = (self.origin as u16 & 0b111111) << 6; // 6 bits
+        let destination: u16 = self.destination as u16 & 0b111111; // 6 bits
 
         position | destination | move_type
     }
 
     pub fn unpack(packed_move: u16) -> ChessMove {
-        let position_bitmask: u16 = 0b1111110000000000;
-        let destination_bitmask: u16 = 0b0000001111110000;
-        let move_type_bitmask: u16 = 0b0000000000001111;
+        let move_type_bitmask: u16 = 0b1111000000000000; // In the front so it can be sorted
+        let position_bitmask: u16 = 0b0000111111000000;
+        let destination_bitmask: u16 = 0b0000000000111111;
 
-        let position: u8 = ((packed_move & position_bitmask) >> 10) as u8;
-        let destination: u8 = ((packed_move & destination_bitmask) >> 4) as u8;
-        let move_type: u8 = (packed_move & move_type_bitmask) as u8;
+        let move_type: u8 = ((packed_move & move_type_bitmask) >> 12) as u8;
+        let position: u8 = ((packed_move & position_bitmask) >> 6) as u8;
+        let destination: u8 = (packed_move & destination_bitmask) as u8;
 
-        let move_type = match move_type {
-            0 => MoveType::QuietMove,
-            1 => MoveType::DoublePawnPush,
-            2 => MoveType::KingCastle,
-            3 => MoveType::QueenCastle,
-            4 => MoveType::Capture,
-            5 => MoveType::EnPassant,
-            6 => MoveType::QueenPromotion,
-            7 => MoveType::RookPromotion,
-            8 => MoveType::BishopPromotion,
-            9 => MoveType::KnightPromotion,
-            _ => panic!(),
-        };
-
+        let move_type = MoveType::from_u8(move_type);
         ChessMove {
             origin: position,
             destination,

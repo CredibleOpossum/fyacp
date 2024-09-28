@@ -36,7 +36,9 @@ fn negamax(
         return evaluate(&board, tables);
     }
 
-    let move_data = board.get_all_legal_moves(tables);
+    let mut move_data = board.get_all_legal_moves(tables);
+    move_data.0.sort_unstable();
+    move_data.0.reverse();
 
     let mut max_score = i32::MIN;
     for possible_move in 0..move_data.1 {
@@ -76,7 +78,10 @@ pub fn get_best_move(
     tables: &ChessTables,
 ) -> u16 {
     let mut scores = Vec::new();
-    let move_data = board.get_all_legal_moves(tables);
+    let mut move_data = board.get_all_legal_moves(tables);
+    move_data.0.sort_unstable();
+    move_data.0.reverse();
+
     for possible_move in 0..move_data.1 {
         let legal_move = move_data.0[possible_move];
         let new_board = board.move_piece(legal_move);
@@ -143,7 +148,7 @@ pub fn evaluate(board: &Board, tables: &ChessTables) -> i32 {
     let black_mobility_value =
         board.get_full_capture_mask(Color::Black, tables).popcnt() as i32 * MOBILITY_VALUE;
     match board.turn {
-        Color::White => white_value - black_value + white_mobility_value - black_mobility_value,
-        Color::Black => black_value - white_value + black_mobility_value - black_mobility_value,
+        Color::White => white_value - black_value,
+        Color::Black => black_value - white_value,
     }
 }
