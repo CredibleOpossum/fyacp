@@ -11,16 +11,20 @@ use crate::ChessTables;
 use crate::Color;
 use crate::Pieces;
 
+static LARGE_VALUE_SAFE: i32 = 999_999; // Number that is large enough to overshadow any other number, but not so large it will overflow.
+
 fn negamax(
     depth: usize,
     max_depth: usize,
     board: Board,
     mut move_history: HashMap<[[BitBoard; 6]; 2], u8>,
+    mut alpha: i32,
+    beta: i32,
     tables: &ChessTables,
 ) -> i32 {
     match board.get_board_state(tables) {
-        BoardState::Checkmate => return -999_999 + (depth as i32), // Score checkmates at a higher depth lower, meaning the engine will choose the fastest checkmate (or slowest if negative score).
-        BoardState::Stalemate => return 0,                         // Equal position
+        BoardState::Checkmate => return -LARGE_VALUE_SAFE + (depth as i32), // Score checkmates at a higher depth lower, meaning the engine will choose the fastest checkmate (or slowest if negative score).
+        BoardState::Stalemate => return 0,                                  // Equal position
         BoardState::OnGoing => {}
     }
     if let Some(value) = move_history.get(&board.bitboards) {
@@ -30,12 +34,12 @@ fn negamax(
         }
     }
     if depth == max_depth {
-        return evaluate(&board);
+        return evaluate(&board, tables);
     }
 
     let move_data = board.get_all_legal_moves(tables);
 
-    let mut max = i32::MIN;
+    let mut max_score = i32::MIN;
     for possible_move in 0..move_data.1 {
         let legal_move = move_data.0[possible_move];
         let new_board = board.move_piece(legal_move);
@@ -49,12 +53,21 @@ fn negamax(
             max_depth,
             new_board,
             move_history.clone(),
+            -beta, // Flip these values as maximizing player changes.
+            -alpha,
             tables,
         );
-        max = std::cmp::max(max, score);
+        max_score = std::cmp::max(max_score, score);
+
+        if score >= beta {
+            break;
+        }
+        if score > alpha {
+            alpha = score;
+        }
     }
 
-    max
+    max_score
 }
 
 pub fn get_best_move(
@@ -68,7 +81,15 @@ pub fn get_best_move(
     for possible_move in 0..move_data.1 {
         let legal_move = move_data.0[possible_move];
         let new_board = board.move_piece(legal_move);
-        scores.push(-negamax(0, depth, new_board, move_history.clone(), tables));
+        scores.push(-negamax(
+            0,
+            depth,
+            new_board,
+            move_history.clone(),
+            -LARGE_VALUE_SAFE, // Min on maximizing player's turn
+            LARGE_VALUE_SAFE,  // Max on maximizing player's turn
+            tables,
+        ));
     }
 
     let mut best_score = i32::MIN;
@@ -93,7 +114,7 @@ pub fn get_best_move(
     move_data.0[best_move_index]
 }
 
-pub fn evaluate(board: &Board) -> i32 {
+pub fn evaluate(board: &Board, tables: &ChessTables) -> i32 {
     let mut white_value = 0;
     white_value += board.bitboards[Color::White as usize][Pieces::Queen as usize].popcnt() as i32
         * QUEEN_VALUE;
@@ -119,7 +140,15 @@ pub fn evaluate(board: &Board) -> i32 {
         board.bitboards[Color::Black as usize][Pieces::Pawn as usize].popcnt() as i32 * PAWN_VALUE;
 
     match board.turn {
-        Color::White => white_value - black_value,
-        Color::Black => black_value - white_value,
+        Color::White => {
+            (white_value - black_value)
+                + (board.get_full_capture_mask(Color::White, tables).popcnt() as i32
+                    * MOBILITY_VALUE)
+        }
+        Color::Black => {
+            (black_value - white_value)
+                + (board.get_full_capture_mask(Color::White, tables).popcnt() as i32
+                    * MOBILITY_VALUE)
+        }
     }
 }

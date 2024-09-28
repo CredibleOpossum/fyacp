@@ -122,7 +122,7 @@ impl Board {
         mask
     }
 
-    fn get_full_capture_mask(&self, color: Color, tables: &ChessTables) -> BitBoard {
+    pub fn get_full_capture_mask(&self, color: Color, tables: &ChessTables) -> BitBoard {
         let mut board_capturemask = BitBoard(0);
 
         let mut occupancy = match color {
