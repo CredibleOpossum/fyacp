@@ -10,8 +10,7 @@ mod tests {
     #[test]
     fn perft_castling() {
         let tables = ChessTables::default();
-        let board =
-            Board::fen_parser("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
+        let board = fen_parser("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
         let move_count = perft(board, 5, &tables);
         assert_eq!(move_count, 193_690_690);
     }

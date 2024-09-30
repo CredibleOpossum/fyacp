@@ -377,13 +377,16 @@ pub fn fen_parser(fen: &str) -> Board {
         }
     }
 
-    let en_passant_square_string = split_fen[3];
-    if en_passant_square_string != "-" {
-        let board_square_index = HUMAN_READBLE_SQAURES
-            .iter()
-            .position(|&r| r == en_passant_square_string.to_uppercase())
-            .expect("En passant square wasn't vaild.") as u8;
-        board.en_passant = Some(board_square_index)
+    if split_fen.len() > 3 {
+        let en_passant_square_string = split_fen[3];
+        if en_passant_square_string != "-" {
+            let board_square_index = HUMAN_READBLE_SQAURES
+                .iter()
+                .position(|&r| r == en_passant_square_string.to_uppercase())
+                .expect("En passant square wasn't vaild.")
+                as u8;
+            board.en_passant = Some(board_square_index)
+        }
     }
 
     let turn = match split_fen[1] {

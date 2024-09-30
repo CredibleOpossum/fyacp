@@ -30,16 +30,6 @@ impl Board {
         bitboards[0] | bitboards[1] | bitboards[2] | bitboards[3] | bitboards[4] | bitboards[5]
     }
 
-    pub fn get_legal_movement_mask(&self, position: u8, tables: &ChessTables) -> u64 {
-        let mut mask: u64 = 0;
-        let moves = self.get_legal_moves(position, tables);
-        for legal_move in 0..moves.move_length {
-            let legal_move_parsed = ChessMove::unpack(moves.move_buffer[legal_move as usize]);
-            mask |= 1 << legal_move_parsed.destination;
-        }
-        mask
-    }
-
     pub fn get_full_capture_mask(&self, color: Color, tables: &ChessTables) -> BitBoard {
         let mut board_capturemask = BitBoard(0);
 
@@ -63,16 +53,9 @@ impl Board {
     }
 
     pub fn get_board_state(&self, tables: &ChessTables) -> BoardState {
-        let mut self_occupancy = match self.turn {
-            Color::White => self.get_white_occupancy(),
-            Color::Black => self.get_black_occupancy(),
-        };
-
-        while !self_occupancy.is_empty() {
-            let index = self_occupancy.get_index_and_pop();
-            if self.get_legal_moves(index, tables).move_length != 0 {
-                return BoardState::OnGoing;
-            }
+        let legal_moves = self.get_all_legal_moves(tables);
+        if legal_moves.1 != 0 {
+            return BoardState::OnGoing;
         }
 
         if self.is_in_check(tables) {
@@ -258,75 +241,22 @@ impl Board {
         }
         let occupancy = friendly_occupancy | enemy_occupancy;
 
-        let mut movement_mask = BitBoard(0);
-        match piece_type {
-            Pieces::King => {
-                movement_mask =
-                    tables.lookup_tables[LookupTable::KingMoves as usize][position as usize];
-                movement_mask &= !friendly_occupancy;
+        let movement_mask = match piece_type {
+            Pieces::King => generate_king_bitmask(tables, friendly_occupancy, position),
+            Pieces::Pawn => {
+                generate_pawn_bitmask(color, tables, position, occupancy, enemy_occupancy)
             }
-            Pieces::Pawn => match color {
-                Color::White => {
-                    movement_mask |= tables.lookup_tables[LookupTable::WhitePawnMoves as usize]
-                        [position as usize]
-                        & !occupancy;
-
-                    if (tables.lookup_tables[LookupTable::WhitePawnMoves as usize]
-                        [position as usize]
-                        & occupancy)
-                        .is_empty()
-                    {
-                        movement_mask |= tables.lookup_tables
-                            [LookupTable::WhitePawnLongMoves as usize]
-                            [position as usize]
-                            & !occupancy;
-                    }
-                    movement_mask |= tables.lookup_tables[LookupTable::WhitePawnCaptures as usize]
-                        [position as usize]
-                }
-
-                Color::Black => {
-                    movement_mask |= tables.lookup_tables[LookupTable::BlackPawnMoves as usize]
-                        [position as usize]
-                        & !occupancy;
-
-                    if (tables.lookup_tables[LookupTable::BlackPawnMoves as usize]
-                        [position as usize]
-                        & occupancy)
-                        .is_empty()
-                    {
-                        movement_mask |= tables.lookup_tables
-                            [LookupTable::BlackPawnLongMoves as usize]
-                            [position as usize]
-                            & !occupancy;
-                    }
-                    movement_mask |= tables.lookup_tables[LookupTable::BlackPawnCaptures as usize]
-                        [position as usize]
-                        & enemy_occupancy;
-                }
-            },
-
-            Pieces::Knight => {
-                movement_mask =
-                    tables.lookup_tables[LookupTable::KnightMoves as usize][position as usize];
-                movement_mask &= !friendly_occupancy;
-            }
-
-            Pieces::Rook => {
-                movement_mask = rook_moves(position, occupancy, tables);
-                movement_mask &= !friendly_occupancy;
-            }
+            Pieces::Knight => generate_knight_bitmask(tables, position, friendly_occupancy),
+            Pieces::Rook => generate_rook_bitmask(position, occupancy, tables, friendly_occupancy),
             Pieces::Bishop => {
-                movement_mask = bishop_moves(position, occupancy, tables);
-                movement_mask &= !friendly_occupancy;
+                generate_bishop_bitmask(position, occupancy, tables, friendly_occupancy)
             }
             Pieces::Queen => {
-                movement_mask = rook_moves(position, occupancy, tables)
-                    | bishop_moves(position, occupancy, tables);
-                movement_mask &= !friendly_occupancy;
+                generate_queen_bitmask(position, occupancy, tables, friendly_occupancy)
             }
             Pieces::None => panic!(),
-        }
+        };
+
         (movement_mask, friendly_occupancy, enemy_occupancy)
     }
 
@@ -570,20 +500,11 @@ impl Board {
         }
     }
 
-    pub fn get_legal_movement_mask_safe(&self, position: u8, tables: &ChessTables) -> BitBoard {
-        // This function exists because the regular one has no safety and will crash if the input isn't ideal
-        let (piece_type, color) = self.find_piece(position);
-        if self.turn != color || piece_type == Pieces::None {
-            BitBoard(0)
-        } else {
-            BitBoard(self.get_legal_movement_mask(position, tables))
-        }
-    }
-
     fn find_kind_bitboard(&self, color: Color) -> BitBoard {
         self.bitboards[color as usize][0]
     }
 
+    /*
     fn get_legal_moves(&self, position: u8, tables: &ChessTables) -> Moves {
         let psuedo_legal_moves = self.get_pseudolegal_moves(position, tables);
         let mut legal_move_buffer = Moves::default();
@@ -618,6 +539,7 @@ impl Board {
         legal_move_buffer.move_length = legal_move_index as u8;
         legal_move_buffer
     }
+    */
 
     pub fn get_text_representation(&self) -> [String; 64] {
         fn insert_chess_pieces(
@@ -653,8 +575,11 @@ impl Board {
     }
 
     pub fn get_all_legal_moves(&self, tables: &ChessTables) -> ([u16; MAX_MOVE_BUFFER], usize) {
-        let mut move_buffer = [0; MAX_MOVE_BUFFER];
+        let mut psuedolegal_move_buffer = [0; MAX_MOVE_BUFFER];
         let mut array_position: usize = 0;
+
+        let mut legal_move_buffer = [0; MAX_MOVE_BUFFER];
+        let mut legal_move_position = 0;
 
         let mut self_occupancy = match self.turn {
             Color::White => self.get_white_occupancy(),
@@ -663,15 +588,179 @@ impl Board {
 
         while !self_occupancy.is_empty() {
             let index = self_occupancy.get_index_and_pop();
-            let moves = self.get_legal_moves(index, tables);
+            let moves = self.get_pseudolegal_moves(index, tables);
 
-            move_buffer[array_position..array_position + moves.move_length as usize]
+            psuedolegal_move_buffer[array_position..array_position + moves.move_length as usize]
                 .clone_from_slice(&moves.move_buffer[0..moves.move_length as usize]);
             array_position += moves.move_length as usize;
         }
 
-        (move_buffer, array_position)
+        // Now we have a buffer of all psuedolegal moves
+        for move_index in 0..array_position {
+            let chess_move = psuedolegal_move_buffer[move_index];
+            let temp_board = self.move_piece(chess_move);
+
+            let mut friendly_occupancy = temp_board.get_white_occupancy();
+            let mut enemy_occupancy = temp_board.get_black_occupancy();
+            let mut occupancy = friendly_occupancy | enemy_occupancy;
+            if self.turn != Color::White {
+                std::mem::swap(&mut friendly_occupancy, &mut enemy_occupancy);
+            }
+
+            let enemy_bitboards = match self.turn {
+                Color::White => temp_board.bitboards[1],
+                Color::Black => temp_board.bitboards[0],
+            };
+
+            let king_bitmask = temp_board.find_kind_bitboard(self.turn); // Find king bitboard of who just turned, for preventing moving into check.
+            let king_position = king_bitmask.0.trailing_zeros() as u8;
+            friendly_occupancy.0 ^= 1 << king_position; // Remove king from bitmask so it can be hit.
+            occupancy.0 ^= 1 << king_position;
+
+            if king_position == 64 {
+                continue;
+            }
+
+            let knight_inverse = generate_knight_bitmask(tables, king_position, friendly_occupancy)
+                & enemy_bitboards[Pieces::Knight as usize];
+            if !knight_inverse.is_empty() {
+                // Piece is giving check
+                continue; // Move onto next psuedolegal move
+            }
+
+            let king_inverse = generate_king_bitmask(tables, friendly_occupancy, king_position)
+                & enemy_bitboards[Pieces::King as usize];
+            if !king_inverse.is_empty() {
+                continue;
+            }
+
+            let pawn_inverse =
+                generate_pawn_bitmask(self.turn, tables, king_position, occupancy, enemy_occupancy)
+                    & enemy_bitboards[Pieces::Pawn as usize];
+            if !pawn_inverse.is_empty() {
+                continue;
+            }
+
+            let bishop_inverse =
+                generate_bishop_bitmask(king_position, occupancy, tables, friendly_occupancy)
+                    & enemy_bitboards[Pieces::Bishop as usize];
+            if !bishop_inverse.is_empty() {
+                continue;
+            }
+
+            let queen_inverse =
+                generate_queen_bitmask(king_position, occupancy, tables, friendly_occupancy)
+                    & enemy_bitboards[Pieces::Queen as usize];
+            if !queen_inverse.is_empty() {
+                continue;
+            }
+
+            let rook_inverse =
+                generate_rook_bitmask(king_position, occupancy, tables, friendly_occupancy)
+                    & enemy_bitboards[Pieces::Rook as usize];
+            if !rook_inverse.is_empty() {
+                continue;
+            }
+
+            // All legal checks passed
+            legal_move_buffer[legal_move_position] = chess_move;
+            legal_move_position += 1;
+        }
+
+        (legal_move_buffer, legal_move_position)
     }
+}
+
+fn generate_queen_bitmask(
+    position: u8,
+    occupancy: BitBoard,
+    tables: &ChessTables,
+    friendly_occupancy: BitBoard,
+) -> BitBoard {
+    let mut movement_mask =
+        rook_moves(position, occupancy, tables) | bishop_moves(position, occupancy, tables);
+    movement_mask &= !friendly_occupancy;
+    movement_mask
+}
+
+fn generate_bishop_bitmask(
+    position: u8,
+    occupancy: BitBoard,
+    tables: &ChessTables,
+    friendly_occupancy: BitBoard,
+) -> BitBoard {
+    let mut movement_mask = bishop_moves(position, occupancy, tables);
+    movement_mask &= !friendly_occupancy;
+    movement_mask
+}
+
+fn generate_rook_bitmask(
+    position: u8,
+    occupancy: BitBoard,
+    tables: &ChessTables,
+    friendly_occupancy: BitBoard,
+) -> BitBoard {
+    let mut movement_mask = rook_moves(position, occupancy, tables);
+    movement_mask &= !friendly_occupancy;
+    movement_mask
+}
+
+fn generate_knight_bitmask(
+    tables: &ChessTables,
+    position: u8,
+    friendly_occupancy: BitBoard,
+) -> BitBoard {
+    let mut movement_mask =
+        tables.lookup_tables[LookupTable::KnightMoves as usize][position as usize];
+    movement_mask &= !friendly_occupancy;
+    movement_mask
+}
+
+fn generate_pawn_bitmask(
+    color: Color,
+    tables: &ChessTables,
+    position: u8,
+    occupancy: BitBoard,
+    enemy_occupancy: BitBoard,
+) -> BitBoard {
+    let mut movement_mask = BitBoard(0);
+    match color {
+        Color::White => {
+            movement_mask |= tables.lookup_tables[LookupTable::WhitePawnMoves as usize]
+                [position as usize]
+                & !occupancy;
+
+            if (tables.lookup_tables[LookupTable::WhitePawnMoves as usize][position as usize]
+                & occupancy)
+                .is_empty()
+            {
+                movement_mask |= tables.lookup_tables[LookupTable::WhitePawnLongMoves as usize]
+                    [position as usize]
+                    & !occupancy;
+            }
+            movement_mask |=
+                tables.lookup_tables[LookupTable::WhitePawnCaptures as usize][position as usize]
+        }
+
+        Color::Black => {
+            movement_mask |= tables.lookup_tables[LookupTable::BlackPawnMoves as usize]
+                [position as usize]
+                & !occupancy;
+
+            if (tables.lookup_tables[LookupTable::BlackPawnMoves as usize][position as usize]
+                & occupancy)
+                .is_empty()
+            {
+                movement_mask |= tables.lookup_tables[LookupTable::BlackPawnLongMoves as usize]
+                    [position as usize]
+                    & !occupancy;
+            }
+            movement_mask |= tables.lookup_tables[LookupTable::BlackPawnCaptures as usize]
+                [position as usize]
+                & enemy_occupancy;
+        }
+    }
+    movement_mask
 }
 
 pub fn human_readable_position(position: u8) -> String {
@@ -719,7 +808,7 @@ pub fn perft(board: Board, depth: u8, tables: &ChessTables) -> usize {
         let parsed = ChessMove::unpack(legal_moves.0[possible_move]);
 
         println!(
-            "{}{}: {}",
+            "{}{} {}",
             human_readable_position(parsed.origin).to_lowercase(),
             human_readable_position(parsed.destination).to_lowercase(),
             move_count
@@ -727,4 +816,15 @@ pub fn perft(board: Board, depth: u8, tables: &ChessTables) -> usize {
     }
 
     sum
+}
+
+fn generate_king_bitmask(
+    tables: &ChessTables,
+    friendly_occupancy: BitBoard,
+    position: u8,
+) -> BitBoard {
+    let mut movement_mask =
+        tables.lookup_tables[LookupTable::KingMoves as usize][position as usize];
+    movement_mask &= !friendly_occupancy;
+    movement_mask
 }

@@ -94,7 +94,7 @@ fn main() {
                         .expect("depth provided wasn't a vaild usize");
                     let results = perft(board.clone(), depth, &tables);
 
-                    let result_string = format!("Nodes searched: {}", results);
+                    let result_string = format!("\n{}", results);
                     uci.put(&result_string);
                 }
                 "wtime" => {
@@ -111,9 +111,6 @@ fn main() {
                         fchess::structs::MoveType::KnightPromotion => "k",
                         _ => "",
                     };
-                    //for key in board_history.values() {
-                    //    uci.debug(&key.to_string());
-                    //}
                     uci.put(&format!(
                         "bestmove {}{}{}",
                         human_readable_position(chess_move.origin).to_lowercase(),
@@ -136,7 +133,6 @@ fn main() {
                         };
 
                         board = fchess::chess_data::fen_parser(&fen.join(" "));
-                        uci.debug(&format!("{:?}", board.en_passant));
                     }
                     _ => panic!(),
                 };
@@ -166,7 +162,9 @@ fn main() {
                 }
             }
 
-            _ => {}
+            _ => {
+                break;
+            }
         }
     }
 
