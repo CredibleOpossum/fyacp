@@ -148,7 +148,7 @@ pub fn evaluate(board: &Board, tables: &ChessTables) -> i32 {
     let black_mobility_value =
         board.get_full_capture_mask(Color::Black, tables).popcnt() as i32 * MOBILITY_VALUE;
     match board.turn {
-        Color::White => white_value - black_value,
-        Color::Black => black_value - white_value,
+        Color::White => (white_value - black_value) + (white_mobility_value - black_mobility_value),
+        Color::Black => (black_value - white_value) + (black_mobility_value - white_mobility_value),
     }
 }

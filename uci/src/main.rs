@@ -99,7 +99,7 @@ fn main() {
                 }
                 "wtime" => {
                     let chess_move = ChessMove::unpack(get_best_move(
-                        4,
+                        5,
                         board.clone(),
                         board_history.clone(),
                         &tables,
