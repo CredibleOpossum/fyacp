@@ -3,7 +3,7 @@ use crate::{
     MoveType, Moves, Pieces, EMPTY_STRING, HUMAN_READBLE_SQAURES, MAX_MOVE_BUFFER,
 };
 
-use crate::constants::*;
+use crate::{constants::*, LegalMoves};
 
 fn bishop_moves(position: u8, occupancy: BitBoard, tables: &ChessTables) -> BitBoard {
     let movement_mask = tables.lookup_tables[LookupTable::BishopMoves as usize][position as usize]; // Short rook bitmask
@@ -54,7 +54,7 @@ impl Board {
 
     pub fn get_board_state(&self, tables: &ChessTables) -> BoardState {
         let legal_moves = self.get_all_legal_moves(tables);
-        if legal_moves.1 != 0 {
+        if legal_moves.length != 0 {
             return BoardState::OnGoing;
         }
 
@@ -456,7 +456,7 @@ impl Board {
                 }
             }
         }
-        move_buffer.move_length = move_position as u8;
+        move_buffer.length = move_position as u8;
         move_buffer
     }
 
@@ -468,8 +468,8 @@ impl Board {
         tables: &ChessTables,
     ) {
         let legal_moves = self.get_all_legal_moves(tables);
-        for possible_move in 0..legal_moves.1 {
-            let parsed_move = ChessMove::unpack(legal_moves.0[possible_move]);
+        for possible_move in 0..legal_moves.length {
+            let parsed_move = ChessMove::unpack(legal_moves.move_buffer[possible_move as usize]);
             match parsed_move.move_type {
                 MoveType::QueenPromotion => {
                     if promotion_preference != 'q' {
@@ -495,7 +495,7 @@ impl Board {
                 _ => {}
             }
             if parsed_move.origin == position && parsed_move.destination == destination {
-                *self = self.move_piece(legal_moves.0[possible_move]);
+                *self = self.move_piece(legal_moves.move_buffer[possible_move as usize]);
             }
         }
     }
@@ -574,7 +574,7 @@ impl Board {
         text_representation
     }
 
-    pub fn get_all_legal_moves(&self, tables: &ChessTables) -> ([u16; MAX_MOVE_BUFFER], usize) {
+    pub fn get_all_legal_moves(&self, tables: &ChessTables) -> LegalMoves {
         let mut psuedolegal_move_buffer = [0; MAX_MOVE_BUFFER];
         let mut array_position: usize = 0;
 
@@ -590,9 +590,9 @@ impl Board {
             let index = self_occupancy.get_index_and_pop();
             let moves = self.get_pseudolegal_moves(index, tables);
 
-            psuedolegal_move_buffer[array_position..array_position + moves.move_length as usize]
-                .clone_from_slice(&moves.move_buffer[0..moves.move_length as usize]);
-            array_position += moves.move_length as usize;
+            psuedolegal_move_buffer[array_position..array_position + moves.length as usize]
+                .clone_from_slice(&moves.move_buffer[0..moves.length as usize]);
+            array_position += moves.length as usize;
         }
 
         // Now we have a buffer of all psuedolegal moves
@@ -661,7 +661,10 @@ impl Board {
             legal_move_position += 1;
         }
 
-        (legal_move_buffer, legal_move_position)
+        LegalMoves {
+            move_buffer: legal_move_buffer,
+            length: legal_move_position as u8,
+        }
     }
 }
 
@@ -764,19 +767,19 @@ pub fn human_readable_position(position: u8) -> String {
 fn perft_internal(board: Board, depth: u8, max_depth: u8, tables: &ChessTables) -> usize {
     let all_legal_moves = board.get_all_legal_moves(tables);
     if depth == max_depth {
-        return all_legal_moves.1;
+        return all_legal_moves.length as usize;
     }
 
     match board.get_board_state(tables) {
-        BoardState::Checkmate => return all_legal_moves.1,
-        BoardState::Stalemate => return all_legal_moves.1,
+        BoardState::Checkmate => return all_legal_moves.length as usize,
+        BoardState::Stalemate => return all_legal_moves.length as usize,
         BoardState::OnGoing => {}
     }
 
     let mut move_sum = 0;
 
-    for possible_move in 0..all_legal_moves.1 {
-        let postmove = board.move_piece(all_legal_moves.0[possible_move]);
+    for possible_move in 0..all_legal_moves.length {
+        let postmove = board.move_piece(all_legal_moves.move_buffer[possible_move as usize]);
         move_sum += perft_internal(postmove, depth + 1, max_depth, tables);
     }
 
@@ -787,19 +790,19 @@ pub fn perft(board: Board, depth: u8, tables: &ChessTables) -> usize {
     let mut sum = 0;
     let legal_moves = board.get_all_legal_moves(tables);
 
-    for possible_move in 0..legal_moves.1 {
+    for possible_move in 0..legal_moves.length {
         let move_count = if depth == 1 {
             1
         } else {
             perft_internal(
-                board.move_piece(legal_moves.0[possible_move]),
+                board.move_piece(legal_moves.move_buffer[possible_move as usize]),
                 1,
                 depth - 1,
                 tables,
             )
         };
         sum += move_count;
-        let parsed = ChessMove::unpack(legal_moves.0[possible_move]);
+        let parsed = ChessMove::unpack(legal_moves.move_buffer[possible_move as usize]);
 
         println!(
             "{}{} {}",

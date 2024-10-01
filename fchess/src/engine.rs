@@ -37,12 +37,12 @@ fn negamax(
     }
 
     let mut move_data = board.get_all_legal_moves(tables);
-    move_data.0.sort_unstable();
-    move_data.0.reverse();
+    move_data.move_buffer.sort_unstable();
+    move_data.move_buffer.reverse();
 
     let mut max_score = i32::MIN;
-    for possible_move in 0..move_data.1 {
-        let legal_move = move_data.0[possible_move];
+    for possible_move in 0..move_data.length {
+        let legal_move = move_data.move_buffer[possible_move as usize];
         let new_board = board.move_piece(legal_move);
         let possible_seen_count = move_history.get(&new_board.bitboards);
         match possible_seen_count {
@@ -79,11 +79,11 @@ pub fn get_best_move(
 ) -> u16 {
     let mut scores = Vec::new();
     let mut move_data = board.get_all_legal_moves(tables);
-    move_data.0.sort_unstable();
-    move_data.0.reverse();
+    move_data.move_buffer.sort_unstable();
+    move_data.move_buffer.reverse();
 
-    for possible_move in 0..move_data.1 {
-        let legal_move = move_data.0[possible_move];
+    for possible_move in 0..move_data.length {
+        let legal_move = move_data.move_buffer[possible_move as usize];
         let new_board = board.move_piece(legal_move);
         scores.push(-negamax(
             0,
@@ -100,7 +100,7 @@ pub fn get_best_move(
     let mut best_move_index = 0;
     println!("----------------------------");
     for (index, score) in scores.iter().enumerate() {
-        let chess_move = ChessMove::unpack(move_data.0[index]);
+        let chess_move = ChessMove::unpack(move_data.move_buffer[index]);
         let text = format!(
             "{}{}",
             human_readable_position(chess_move.origin),
@@ -115,7 +115,7 @@ pub fn get_best_move(
     println!("----------------------------");
 
     println!("{}", best_move_index);
-    move_data.0[best_move_index]
+    move_data.move_buffer[best_move_index]
 }
 
 pub fn evaluate(board: &Board, tables: &ChessTables) -> i32 {

@@ -189,7 +189,6 @@ impl Default for RaycastTables {
     }
 }
 
-#[allow(dead_code)]
 pub enum LookupTable {
     KingMoves,
     QueenMoves,
@@ -205,22 +204,21 @@ pub enum LookupTable {
     Blank,
 }
 
-#[derive(Debug)]
 pub struct Moves {
     pub move_buffer: [u16; MAX_LEGAL_MOVES],
-    pub move_length: u8,
+    pub length: u8,
 }
 
 pub struct LegalMoves {
     pub move_buffer: [u16; MAX_MOVE_BUFFER],
-    pub move_length: u8,
+    pub length: u8,
 }
 
 impl Default for Moves {
     fn default() -> Moves {
         Moves {
             move_buffer: [0u16; MAX_LEGAL_MOVES],
-            move_length: 0,
+            length: 0,
         }
     }
 }
