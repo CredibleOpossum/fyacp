@@ -602,7 +602,7 @@ impl Board {
 
             let mut friendly_occupancy = temp_board.get_white_occupancy();
             let mut enemy_occupancy = temp_board.get_black_occupancy();
-            let mut occupancy = friendly_occupancy | enemy_occupancy;
+            let occupancy = friendly_occupancy | enemy_occupancy;
             if self.turn != Color::White {
                 std::mem::swap(&mut friendly_occupancy, &mut enemy_occupancy);
             }
@@ -614,8 +614,6 @@ impl Board {
 
             let king_bitmask = temp_board.find_kind_bitboard(self.turn); // Find king bitboard of who just turned, for preventing moving into check.
             let king_position = king_bitmask.0.trailing_zeros() as u8;
-            friendly_occupancy.0 ^= 1 << king_position; // Remove king from bitmask so it can be hit.
-            occupancy.0 ^= 1 << king_position;
 
             let knight_inverse = generate_knight_bitmask(tables, king_position, friendly_occupancy)
                 & enemy_bitboards[Pieces::Knight as usize];

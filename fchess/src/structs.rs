@@ -211,6 +211,11 @@ pub struct Moves {
     pub move_length: u8,
 }
 
+pub struct LegalMoves {
+    pub move_buffer: [u16; MAX_MOVE_BUFFER],
+    pub move_length: u8,
+}
+
 impl Default for Moves {
     fn default() -> Moves {
         Moves {
