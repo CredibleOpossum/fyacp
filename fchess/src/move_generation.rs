@@ -30,6 +30,7 @@ impl Board {
         bitboards[0] | bitboards[1] | bitboards[2] | bitboards[3] | bitboards[4] | bitboards[5]
     }
 
+    #[inline]
     pub fn get_full_capture_mask(&self, color: Color, tables: &ChessTables) -> BitBoard {
         let mut board_capturemask = BitBoard(0);
 
@@ -65,12 +66,6 @@ impl Board {
         BoardState::Stalemate
     }
 
-    fn clear_square(&mut self, position: u8, color: Color) {
-        for bitboard in &mut self.bitboards[color as usize] {
-            bitboard.clear_bit(position);
-        }
-    }
-
     fn find_piece(&self, position: u8) -> (Pieces, Color) {
         for index in 0..6 {
             if self.bitboards[Color::White as usize][index].get_bit(position) {
@@ -90,6 +85,13 @@ impl Board {
         }
     }
 
+    #[inline]
+    fn clear_square(&mut self, position: u8, color: Color) {
+        for bitboard in &mut self.bitboards[color as usize] {
+            bitboard.clear_bit(position);
+        }
+    }
+
     pub fn move_piece(&self, chess_move: u16) -> Board {
         let chess_move = ChessMove::unpack(chess_move);
 
@@ -97,6 +99,7 @@ impl Board {
         let (piece_type, color) = new_board.find_piece(chess_move.origin);
         let color_index = color as usize;
 
+        new_board.clear_square(chess_move.destination, new_board.turn.opposite());
         new_board.bitboards[color_index][piece_type as usize].clear_bit(chess_move.origin);
 
         match chess_move.move_type {
@@ -125,7 +128,6 @@ impl Board {
                     .set_bit(chess_move.destination - 1);
             }
             MoveType::Capture => {
-                new_board.clear_square(chess_move.destination, color.opposite());
                 new_board.bitboards[color_index][piece_type as usize]
                     .set_bit(chess_move.destination);
             }
@@ -135,12 +137,12 @@ impl Board {
                     Color::Black => 8,
                 };
                 let en_pasant_location = (chess_move.destination as i32 + direction) as u8;
-                new_board.clear_square(en_pasant_location, color.opposite());
+                new_board.bitboards[self.turn.opposite() as usize][Pieces::Pawn as usize]
+                    .clear_bit(en_pasant_location);
                 new_board.bitboards[color_index][piece_type as usize]
                     .set_bit(chess_move.destination);
             }
             MoveType::QueenPromotion => {
-                new_board.clear_square(chess_move.destination, color.opposite());
                 match self.turn {
                     Color::White => new_board.bitboards[color_index][Pieces::Queen as usize]
                         .set_bit(chess_move.destination),
@@ -149,7 +151,6 @@ impl Board {
                 };
             }
             MoveType::RookPromotion => {
-                new_board.clear_square(chess_move.destination, color.opposite());
                 match self.turn {
                     Color::White => new_board.bitboards[color_index][Pieces::Rook as usize]
                         .set_bit(chess_move.destination),
@@ -158,7 +159,6 @@ impl Board {
                 };
             }
             MoveType::BishopPromotion => {
-                new_board.clear_square(chess_move.destination, color.opposite());
                 match self.turn {
                     Color::White => new_board.bitboards[color_index][Pieces::Bishop as usize]
                         .set_bit(chess_move.destination),
@@ -167,7 +167,6 @@ impl Board {
                 };
             }
             MoveType::KnightPromotion => {
-                new_board.clear_square(chess_move.destination, color.opposite());
                 match self.turn {
                     Color::White => new_board.bitboards[color_index][Pieces::Knight as usize]
                         .set_bit(chess_move.destination),

@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::thread;
+use std::thread::JoinHandle;
 
 use crate::bitboard::BitBoard;
 use crate::constants::*;
@@ -77,38 +79,48 @@ pub fn get_best_move(
     move_history: HashMap<[[BitBoard; 6]; 2], u8>,
     tables: &ChessTables,
 ) -> u16 {
-    let mut scores = Vec::new();
+    let mut scores: Vec<JoinHandle<i32>> = Vec::new();
     let mut move_data = board.get_all_legal_moves(tables);
     move_data.move_buffer.sort_unstable();
     move_data.move_buffer.reverse();
 
+    let mut move_scores = Vec::new();
+
     for possible_move in 0..move_data.length {
+        let history_clone = move_history.clone();
+
         let legal_move = move_data.move_buffer[possible_move as usize];
         let new_board = board.move_piece(legal_move);
-        scores.push(-negamax(
-            0,
-            depth,
-            new_board,
-            move_history.clone(),
-            -LARGE_VALUE_SAFE, // Min on maximizing player's turn
-            LARGE_VALUE_SAFE,  // Max on maximizing player's turn
-            tables,
-        ));
+
+        let tables_clone = tables.clone();
+        move_scores.push(thread::spawn(move || {
+            -negamax(
+                0,
+                depth,
+                new_board,
+                history_clone,
+                -LARGE_VALUE_SAFE, // Min on maximizing player's turn
+                LARGE_VALUE_SAFE,  // Max on maximizing player's turn
+                &tables_clone,
+            )
+        }));
     }
 
     let mut best_score = i32::MIN;
     let mut best_move_index = 0;
     println!("----------------------------");
-    for (index, score) in scores.iter().enumerate() {
+    move_scores.reverse();
+    for index in 0..move_scores.len() {
+        let score = move_scores.pop().unwrap().join().unwrap();
         let chess_move = ChessMove::unpack(move_data.move_buffer[index]);
         let text = format!(
             "{}{}",
             human_readable_position(chess_move.origin),
             human_readable_position(chess_move.destination)
         );
-        println!("{}: {}", text, *score);
-        if *score > best_score {
-            best_score = *score;
+        println!("{}: {}", text, score);
+        if score > best_score {
+            best_score = score;
             best_move_index = index;
         }
     }

@@ -249,6 +249,7 @@ impl Default for CastlingRights {
     }
 }
 
+#[derive(Clone)]
 pub struct ChessTables {
     pub lookup_tables: [[BitBoard; BOARD_SIZE]; 12],
 }
