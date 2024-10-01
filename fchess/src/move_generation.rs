@@ -617,10 +617,6 @@ impl Board {
             friendly_occupancy.0 ^= 1 << king_position; // Remove king from bitmask so it can be hit.
             occupancy.0 ^= 1 << king_position;
 
-            if king_position == 64 {
-                continue;
-            }
-
             let knight_inverse = generate_knight_bitmask(tables, king_position, friendly_occupancy)
                 & enemy_bitboards[Pieces::Knight as usize];
             if !knight_inverse.is_empty() {
